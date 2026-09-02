@@ -11,15 +11,16 @@ def add_project_page():
                                     validation={'Sunt necesare 6 cifre': lambda v: len(v) == 6 if v else False}) \
                 .props('outlined mask="######"').classes('w-full')
 
-            ui.label('Fișiere obligatorii').classes('text-xl font-semibold mt-4')
+            ui.label('Fișiere obligatorii (format .PDF)').classes('text-xl font-semibold mt-4')
             
             with ui.row().classes('w-full items-center gap-4'):
-                ui.label('Ghid al apelului:').classes('w-1/3')
-                ui.upload(label='Încărcați Ghid al apelului (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
+                ui.label('Ghidul apelului(anexele se atașează la alte documente):').classes('w-1/3')
+                ui.upload(multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
 
             with ui.row().classes('w-full items-center gap-4'):
-                ui.label('Contract de finanțare:').classes('w-1/3')
-                ui.upload(label='Încărcați Contract de finanțare (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
+                ui.label('Contractul de finanțare:').classes('w-1/3')
+                ui.upload(multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
+
 
             ui.label('Alte fișiere PDF').classes('text-xl font-semibold mt-4')
             
@@ -30,7 +31,7 @@ def add_project_page():
                     row = ui.row().classes('w-full items-center gap-4')
                     with row:
                         file_type = ui.input('Nume/Tip fișier').props('outlined').classes('w-1/3')
-                        upload = ui.upload(label='Încărcați fișier (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
+                        upload = ui.upload(multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
                         ui.button(icon='delete', on_click=lambda r=row: r.delete()).props('flat color="negative"')
 
             ui.button('Adaugă fișier suplimentar', icon='add', on_click=add_upload).props('flat')
