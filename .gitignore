@@ -1,0 +1,28 @@
+# Documente ADR locale
+.local-sources/
+
+# Mediu si secrete
+.env
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Baze de date locale
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE
+.vscode/
+.idea/
+
+# Sistem de operare
+.DS_Store
+Thumbs.db
