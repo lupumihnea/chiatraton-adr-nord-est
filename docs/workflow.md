@@ -11,7 +11,8 @@ flowchart TD
     U1[Utilizatorul configurează Project] --> A1[API salvează prin ProjectRepository]
     A1 --> U2[Utilizatorul atașează Document]
     U2 --> J1[AnalysisJob extrage propuneri de Criterion prin AIClient]
-    J1 --> U3[Utilizatorul confirmă sau corectează Criterion]
+    J1 --> P1[API păstrează CriterionProposal cu SourceAnchor]
+    P1 --> U3[Utilizatorul acceptă, corectează sau respinge propunerea]
     U3 --> B1[Bază de monitorizare versionată]
     B1 --> U4[Utilizatorul selectează documentele unui Report periodic]
     U4 --> J2[AnalysisJob analizează raportul]
@@ -31,10 +32,17 @@ flowchart TD
 1. Utilizatorul creează un `Project` prin UI.
 2. UI-ul trimite comanda către API; nu scrie direct în DB.
 3. Utilizatorul atașează documentele proiectului.
-4. API-ul pornește un `AnalysisJob` prin `AIClient` pentru propuneri de criterii.
-5. Fiecare criteriu propus include sursa sa.
-6. Utilizatorul confirmă sau corectează criteriile.
-7. API-ul fixează o versiune a bazei de monitorizare.
+4. API-ul pornește idempotent un `AnalysisJob` de tip `extract_criteria`,
+   folosind numai `documentIds` selectate explicit.
+5. AI-ul returnează date candidate; API-ul le păstrează ca
+   `CriterionProposal`, fiecare cu cel puțin un `SourceAnchor` complet.
+6. Utilizatorul alege `accept`, `correct` sau `reject` pentru fiecare
+   propunere. `accept` și `correct` creează un `Criterion`; `reject` nu creează
+   criteriu.
+7. Propunerile și review-urile rămân auditabile după decizie.
+8. Extracția adaugă propuneri și criterii aprobate fără să șteargă, să
+   înlocuiască sau să dezactiveze criterii existente.
+9. API-ul fixează o versiune a bazei de monitorizare.
 
 ## 4. Ciclul unui raport
 
@@ -67,6 +75,11 @@ La atingerea datei-limită, sistemul propune închiderea monitorizării, dar uti
 
 `AnalysisJob`: `queued`, `running`, `succeeded`, `failed`, `cancelled`.
 
+`AnalysisJob.kind`: `extract_criteria` sau `analyze_report`. Endpointul de
+stare este comun, iar câmpurile specifice tipului sunt păstrate separat.
+
+`CriterionProposalReview.action`: `accept`, `correct`, `reject`.
+
 `Report.status`: `created`, `analysis_queued`, `analysis_in_progress`, `awaiting_user_decision`, `completed`, `analysis_failed`. Acesta este independent de `externalStatus`, care rămâne text opac.
 
 `CriterionValidation`: `awaiting_user_decision`, `decided`, `insufficient_evidence`, `analysis_failed`.
@@ -78,4 +91,7 @@ La atingerea datei-limită, sistemul propune închiderea monitorizării, dar uti
 - Lipsa documentului, paginii sau pasajului produce `insufficient_evidence`, nu o constatare fără suport.
 - Eșecul unui criteriu nu anulează rezultatele valide ale celorlalte criterii; raportul rămâne incomplet până la rezolvare.
 - Retry-ul unui `AnalysisJob` folosește aceeași cheie de idempotency și creează o revizie numai când există un rezultat nou complet.
+- O propunere fără document, pagină sau pasaj invalidează rezultatul extracției; nu se creează automat un criteriu incomplet.
+- Un batch de review-uri este atomic și idempotent; o revizie depășită sau o propunere deja revizuită produce conflict.
+- Eșecul ori reluarea extracției nu șterge propunerile și criteriile existente.
 - UI-ul nu ocolește API-ul pentru recuperare, editare sau finalizare.

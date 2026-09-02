@@ -6,6 +6,11 @@
 
 AI-ul propune rezultate. Nu creează `UserDecision`, nu finalizează un `Report`, nu emite decizii juridice și nu execută acțiuni în MyADR/MySMIS.
 
+Pentru extracție, AI-ul returnează numai date candidate. API-ul le persistă ca
+`CriterionProposal`; numai review-ul explicit al utilizatorului poate crea un
+`Criterion`. AI-ul nu șterge, nu înlocuiește și nu dezactivează criterii
+existente.
+
 ## 2. Interfață conceptuală
 
 ```text
@@ -60,6 +65,7 @@ Reguli obligatorii:
 {
   "contractVersion": "1.0",
   "analysisJobId": "88888888-8888-4888-8888-888888888888",
+  "idempotencyKey": "synthetic-criterion-extraction-0001",
   "projectId": "11111111-1111-4111-8111-111111111111",
   "documents": [
     {
@@ -78,11 +84,12 @@ Reguli obligatorii:
 {
   "contractVersion": "1.0",
   "analysisJobId": "88888888-8888-4888-8888-888888888888",
-  "criteria": [
+  "proposals": [
     {
       "clientReference": "criterion-proposal-1",
-      "description": "Cerință formulată verificabil, fără date personale.",
-      "deadline": null,
+      "proposedCode": "CRIT-SYN-001",
+      "proposedDescription": "Cerință formulată verificabil, fără date personale.",
+      "proposedDeadline": null,
       "sourceAnchors": [
         {
           "documentId": "22222222-2222-4222-8222-222222222222",
@@ -96,7 +103,18 @@ Reguli obligatorii:
 }
 ```
 
-Criteriile sunt propuneri până la confirmarea sau corectarea de către utilizator.
+Fiecare element din `proposals` trebuie să aibă cel puțin un `SourceAnchor`
+complet. Un element fără `documentId`, `pageNumber` pozitiv și `passage` nevid
+este respins ca `ai_invalid_response` și nu este persistat.
+
+Rezultatul AI este transformat în `CriterionProposal`, nu în `Criterion`.
+Identificatorul public, revizia și starea review-ului sunt atribuite de API, nu
+de model. Propunerile rămân auditabile împreună cu jobul și review-ul lor.
+
+Review-ul nu face parte din `AIClient`: utilizatorul alege `accept`, `correct`
+sau `reject` prin contractul HTTP. `accept` și `correct` creează criterii noi;
+`reject` nu creează criteriu. Niciuna dintre acțiuni nu modifică criteriile
+existente.
 
 ## 6. Analiza unui raport
 
@@ -224,6 +242,12 @@ API-ul respinge sau marchează drept nereușit un răspuns când:
 - răspunsul conține câmpuri de decizie rezervate utilizatorului;
 - schema sau versiunea contractului este incompatibilă.
 
+Pentru extracția criteriilor, API-ul respinge întregul rezultat și marchează
+jobul ca nereușit dacă o propunere nu are cel puțin o ancoră completă, dacă
+referă un document din afara cererii sau dacă două `clientReference` sunt
+identice. Un rezultat valid poate conține lista `proposals` goală, caz în care
+jobul reușește cu `proposalCount=0` și nu schimbă criteriile proiectului.
+
 Un rezultat cu dovezi insuficiente poate fi acceptat structural numai cu `proposedOutcome=insufficient_evidence`, o listă de ancore goală și avertizarea aferentă; nu poate pretinde o constatare factuală fără ancoră.
 
 ## 8. Erori
@@ -244,6 +268,8 @@ Mesajele brute ale furnizorului, prompturile și fragmentele documentelor nu se 
 
 - API-ul furnizează `analysisJobId` și `idempotencyKey`.
 - Retry-ul aceleiași operații nu creează automat un al doilea set de validări.
+- Retry-ul extracției cu același job nu creează un al doilea set de propuneri.
+- Un job nou adaugă propuneri noi și nu șterge propunerile ori criteriile deja existente.
 - Un rezultat nou acceptat produce o revizie nouă de `CriterionValidation`.
 - Rezultatul pentru Raportul 2 nu actualizează înregistrările Raportului 1.
 - Se păstrează `modelName`, `promptVersion` și `contractVersion` pentru audit, fără a salva secrete.

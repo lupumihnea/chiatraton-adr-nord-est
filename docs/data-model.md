@@ -8,6 +8,7 @@ Acest document descrie modelul țintă. Nu modifică schema SQLite existentă di
 erDiagram
     Project ||--o{ Document : contains
     Project ||--o{ Criterion : defines
+    Project ||--o{ AnalysisJob : starts
     Project ||--o{ Report : receives
     Report ||--|{ ReportDocument : groups
     Document ||--o{ ReportDocument : associated_as
@@ -17,6 +18,9 @@ erDiagram
     Document ||--o{ SourceAnchor : anchors
     CriterionValidation ||--o{ UserDecision : reviewed_by
     Report ||--o{ AnalysisJob : analyzed_by
+    AnalysisJob ||--o{ CriterionProposal : produces
+    CriterionProposal ||--o| CriterionProposalReview : reviewed_as
+    CriterionProposalReview ||--o| Criterion : may_create
 ```
 
 ## 2. Entități
@@ -60,6 +64,37 @@ Conținutul documentului nu se duplică în loguri sau metadate. `storageKey` es
 - `sourceAnchorIds`
 
 Un criteriu este versionat. Termenul canonic pentru contracte noi este `Criterion`; `obligation` rămâne doar denumire legacy până la o migrare separată.
+
+### CriterionProposal
+
+- `id`
+- `analysisJobId`
+- `projectId`
+- `revision`
+- `proposedCode`
+- `proposedDescription`
+- `proposedDeadline`, opțional
+- `sourceAnchorIds` - cel puțin o ancoră completă
+- `createdAt`
+
+`CriterionProposal` este rezultatul auditabil al AI-ului și nu este
+`Criterion`. O extracție nouă adaugă propuneri noi; nu șterge, nu înlocuiește
+și nu dezactivează criteriile sau propunerile existente.
+
+### CriterionProposalReview
+
+- `id`
+- `criterionProposalId`
+- `proposalRevision`
+- `action` - `accept`, `correct` sau `reject`
+- `correction`, obligatorie pentru `correct`
+- `comment`, obligatoriu pentru `correct` și `reject`
+- `createdCriterionId`, prezent numai pentru `accept` și `correct`
+- `reviewedBy`, `reviewedAt`
+
+Review-ul este decizia utilizatorului asupra propunerii, nu un rezultat AI.
+Este append-only și rămâne legat de versiunea exactă a propunerii. `accept` și
+`correct` creează un criteriu nou; `reject` nu creează criteriu.
 
 ### Report
 
@@ -129,6 +164,8 @@ Decizia aparține unei revizii precise de `CriterionValidation`. Acțiunea este 
 - `projectId`
 - `reportId`, opțional pentru extracția inițială de criterii
 - `kind` - `extract_criteria` sau `analyze_report`
+- `documentIds` - documentele selectate pentru extracție
+- `proposalCount`, relevant pentru extracție
 - `status`
 - `idempotencyKey`
 - `modelName`
@@ -147,10 +184,17 @@ Decizia aparține unei revizii precise de `CriterionValidation`. Acțiunea este 
 6. Validările și deciziile finalizate sunt append-only; corecțiile creează înregistrări noi legate de cele anterioare.
 7. Un `AnalysisJob.idempotencyKey` este unic în domeniul operației sale.
 8. Statusul intern al raportului este independent de `externalStatus`.
+9. Fiecare `CriterionProposal` are cel puțin un `SourceAnchor` complet din documentele jobului său.
+10. Un job de extracție și review-urile sale nu fac update sau delete asupra criteriilor existente.
+11. O propunere are un singur review final; replay-ul idempotent returnează același rezultat.
 
 ## 4. Păstrarea istoricului
 
 Raportul 1 și Raportul 2 au identificatori diferiți și seturi diferite de validări. Un `UPDATE` asupra validării Raportului 1 nu este mecanismul de salvare a rezultatului Raportului 2. Același principiu se aplică reanalizărilor și deciziilor corective.
+
+Același principiu append-only se aplică extracției: joburile,
+`CriterionProposal` și `CriterionProposalReview` rămân disponibile pentru audit
+după acceptare, corectare sau respingere.
 
 ## 5. Mapare legacy, fără implementare în acest branch
 
@@ -160,4 +204,4 @@ Raportul 1 și Raportul 2 au identificatori diferiți și seturi diferite de val
 | `documents` / `DocumentDAO` | `Document` | Relația cu `Project` trebuie proiectată într-o migrare ulterioară. |
 | `obligations` / `ObligationDAO` | `Criterion` | Pentru contracte noi se folosește `criteria`. |
 | `references` / `ReferenceDAO` | `SourceAnchor` | Câmpurile pagină și text oferă o bază, dar constrângerile obligatorii trebuie întărite ulterior. |
-| fără echivalent | `Report`, `CriterionValidation`, `UserDecision`, `AnalysisJob` | Necesită design DB și migrare aprobate de responsabilul DB. |
+| fără echivalent | `Report`, `CriterionProposal`, `CriterionProposalReview`, `CriterionValidation`, `UserDecision`, `AnalysisJob` | Necesită design DB și migrare aprobate de responsabilul DB. |

@@ -22,6 +22,8 @@ tags:
     description: Documente încărcate în limitele unui proiect.
   - name: Criteria
     description: Criterii versionate ale proiectului.
+  - name: Criterion extraction
+    description: Extracție asincronă de propuneri și review uman auditabil.
   - name: Reports
     description: Rapoarte periodice și asocierile lor de documente.
   - name: Analysis
@@ -220,6 +222,50 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/projects/{projectId}/criterion-extraction-jobs:
+    post:
+      tags: [Criterion extraction]
+      operationId: createCriterionExtractionJob
+      summary: Pornește extracția asincronă a propunerilor de criterii.
+      description: |
+        AI-ul generează numai CriterionProposal. Operația nu creează Criterion și
+        nu șterge sau înlocuiește criteriile existente ale proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriterionExtractionJobCreate'
+      responses:
+        '202':
+          description: Extracția a fost acceptată în coadă.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AIUnavailable'
+
   /api/v1/projects/{projectId}/reports:
     post:
       tags: [Reports]
@@ -347,6 +393,83 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '404':
           $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/criterion-extraction-jobs/{jobId}/proposals:
+    get:
+      tags: [Criterion extraction]
+      operationId: listCriterionExtractionProposals
+      summary: Listează propunerile produse de un job de extracție finalizat.
+      description: |
+        Returnează 409 invalid_analysis_job_kind pentru alt tip de job și
+        409 analysis_job_not_succeeded dacă extracția nu s-a încheiat cu succes.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagină de propuneri, inclusiv review-ul lor când există.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCriterionProposals'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/criterion-extraction-jobs/{jobId}/proposal-reviews:
+    post:
+      tags: [Criterion extraction]
+      operationId: createCriterionProposalReviews
+      summary: Salvează review-uri umane pentru propunerile jobului.
+      description: |
+        Batch-ul este atomic. accept și correct creează câte un Criterion nou;
+        reject păstrează propunerea și review-ul, fără să creeze Criterion.
+        Conflictele folosesc proposal_already_reviewed, stale_proposal_revision,
+        criterion_code_conflict sau idempotency_conflict.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriterionProposalReviewBatch'
+      responses:
+        '201':
+          description: Review-urile au fost salvate și sunt auditabile.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CriterionProposalReviewBatchResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/InternalError'
 
@@ -961,6 +1084,21 @@ components:
           type: string
           format: date-time
 
+    CriterionExtractionJobCreate:
+      type: object
+      additionalProperties: false
+      required: [documentIds]
+      properties:
+        documentIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          description: Documente ale proiectului din care AI-ul poate propune criterii.
+          items:
+            type: string
+            format: uuid
+
     AnalysisJobCreate:
       type: object
       additionalProperties: false
@@ -973,6 +1111,7 @@ components:
           items:
             type: string
             format: uuid
+
         previousReportIds:
           type: array
           uniqueItems: true
@@ -981,6 +1120,10 @@ components:
           items:
             type: string
             format: uuid
+
+    AnalysisJobKind:
+      type: string
+      enum: [analyze_report, extract_criteria]
 
     AnalysisJobStatus:
       type: string
@@ -1005,11 +1148,15 @@ components:
       additionalProperties: false
       required:
         - id
+        - projectId
+        - kind
         - reportId
         - status
+        - documentIds
         - projectDocumentIds
         - previousReportIds
         - criteriaSnapshotVersion
+        - proposalCount
         - createdAt
         - startedAt
         - completedAt
@@ -1018,26 +1165,43 @@ components:
         id:
           type: string
           format: uuid
-        reportId:
+        projectId:
           type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/AnalysisJobKind'
+        reportId:
+          type: [string, 'null']
           format: uuid
         status:
           $ref: '#/components/schemas/AnalysisJobStatus'
+        documentIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
         projectDocumentIds:
           type: array
           uniqueItems: true
+          maxItems: 100
           items:
             type: string
             format: uuid
         previousReportIds:
           type: array
           uniqueItems: true
+          maxItems: 100
           items:
             type: string
             format: uuid
         criteriaSnapshotVersion:
-          type: integer
+          type: [integer, 'null']
           minimum: 1
+        proposalCount:
+          type: [integer, 'null']
+          minimum: 0
         createdAt:
           type: string
           format: date-time
@@ -1051,6 +1215,258 @@ components:
           oneOf:
             - $ref: '#/components/schemas/AnalysisJobError'
             - type: 'null'
+      allOf:
+        - if:
+            properties:
+              kind:
+                const: extract_criteria
+            required: [kind]
+          then:
+            properties:
+              reportId:
+                type: 'null'
+              documentIds:
+                minItems: 1
+              projectDocumentIds:
+                maxItems: 0
+              previousReportIds:
+                maxItems: 0
+              criteriaSnapshotVersion:
+                type: 'null'
+        - if:
+            properties:
+              kind:
+                const: analyze_report
+            required: [kind]
+          then:
+            properties:
+              reportId:
+                type: string
+                format: uuid
+              documentIds:
+                maxItems: 0
+              criteriaSnapshotVersion:
+                type: integer
+                minimum: 1
+              proposalCount:
+                type: 'null'
+        - if:
+            properties:
+              kind:
+                const: extract_criteria
+              status:
+                const: succeeded
+            required: [kind, status]
+          then:
+            properties:
+              proposalCount:
+                type: integer
+                minimum: 0
+
+    CriterionProposalReviewAction:
+      type: string
+      enum: [accept, correct, reject]
+
+    CriterionProposalCorrection:
+      type: object
+      additionalProperties: false
+      required: [code, description, sourceAnchors]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        deadline:
+          type: [string, 'null']
+          format: date
+        sourceAnchors:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SourceAnchor'
+
+    CriterionProposalReview:
+      type: object
+      additionalProperties: false
+      required: [proposalId, proposalRevision, action]
+      properties:
+        proposalId:
+          type: string
+          format: uuid
+        proposalRevision:
+          type: integer
+          minimum: 1
+        action:
+          $ref: '#/components/schemas/CriterionProposalReviewAction'
+        correction:
+          $ref: '#/components/schemas/CriterionProposalCorrection'
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      allOf:
+        - if:
+            properties:
+              action:
+                const: correct
+            required: [action]
+          then:
+            required: [correction, comment]
+          else:
+            properties:
+              correction: false
+        - if:
+            properties:
+              action:
+                const: reject
+            required: [action]
+          then:
+            required: [comment]
+
+    CriterionProposalReviewBatch:
+      type: object
+      additionalProperties: false
+      required: [reviews]
+      properties:
+        reviews:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/CriterionProposalReview'
+
+    CriterionProposalReviewRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - proposalId
+        - proposalRevision
+        - action
+        - correction
+        - comment
+        - createdCriterion
+        - reviewedBy
+        - reviewedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        proposalId:
+          type: string
+          format: uuid
+        proposalRevision:
+          type: integer
+          minimum: 1
+        action:
+          $ref: '#/components/schemas/CriterionProposalReviewAction'
+        correction:
+          oneOf:
+            - $ref: '#/components/schemas/CriterionProposalCorrection'
+            - type: 'null'
+        comment:
+          type: [string, 'null']
+          maxLength: 4000
+        createdCriterion:
+          oneOf:
+            - $ref: '#/components/schemas/Criterion'
+            - type: 'null'
+        reviewedBy:
+          type: string
+          minLength: 1
+          maxLength: 255
+        reviewedAt:
+          type: string
+          format: date-time
+      allOf:
+        - if:
+            properties:
+              action:
+                enum: [accept, correct]
+            required: [action]
+          then:
+            properties:
+              createdCriterion:
+                $ref: '#/components/schemas/Criterion'
+        - if:
+            properties:
+              action:
+                const: reject
+            required: [action]
+          then:
+            properties:
+              createdCriterion:
+                type: 'null'
+
+    CriterionProposal:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - analysisJobId
+        - projectId
+        - revision
+        - proposedCode
+        - proposedDescription
+        - proposedDeadline
+        - sourceAnchors
+        - review
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        analysisJobId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        proposedCode:
+          type: string
+          minLength: 1
+          maxLength: 100
+        proposedDescription:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        proposedDeadline:
+          type: [string, 'null']
+          format: date
+        sourceAnchors:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SourceAnchor'
+        review:
+          oneOf:
+            - $ref: '#/components/schemas/CriterionProposalReviewRecord'
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+
+    CriterionProposalReviewBatchResult:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/CriterionProposalReviewRecord'
 
     AIOutcome:
       type: string
@@ -1254,6 +1670,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Criterion'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    PaginatedCriterionProposals:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CriterionProposal'
         nextCursor:
           type: [string, 'null']
           minLength: 1

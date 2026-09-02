@@ -4,7 +4,7 @@
 
 API-ul v1 oferă vertical slice-ul necesar unui AI verification workspace:
 
-`Project -> Document -> Criterion -> Report -> AnalysisJob -> CriterionValidation -> UserDecision`
+`Project -> Document -> CriterionProposal -> Criterion -> Report -> AnalysisJob -> CriterionValidation -> UserDecision`
 
 ChIAtraton nu înlocuiește MyADR/MySMIS. API-ul nu distribuie task-uri, nu schimbă priorități oficiale, nu autorizează rapoarte și nu trimite clarificări. Metadatele externe sunt păstrate exclusiv pentru trasabilitate.
 
@@ -73,6 +73,9 @@ Clienții nu parsează și nu construiesc cursorul.
 | POST | `/api/v1/projects/{projectId}/documents` | 201 | upload document |
 | POST | `/api/v1/projects/{projectId}/criteria` | 201 | creare criteriu |
 | GET | `/api/v1/projects/{projectId}/criteria` | 200 | listare criterii |
+| POST | `/api/v1/projects/{projectId}/criterion-extraction-jobs` | 202 | pornire extracție asincronă de propuneri |
+| GET | `/api/v1/criterion-extraction-jobs/{jobId}/proposals` | 200 | listare propuneri și review-uri |
+| POST | `/api/v1/criterion-extraction-jobs/{jobId}/proposal-reviews` | 201 | acceptare, corectare sau respingere propuneri |
 | POST | `/api/v1/projects/{projectId}/reports` | 201 | creare raport și asociere documente |
 | GET | `/api/v1/projects/{projectId}/reports` | 200 | listare rapoarte |
 | POST | `/api/v1/reports/{reportId}/analysis-jobs` | 202 | pornire analiză asincronă |
@@ -115,7 +118,64 @@ Dimensiunea maximă este 50 MiB (52.428.800 bytes) per fișier. Depășirea limi
 
 Răspunsul `Document` conține `id`, `projectId`, `displayName`, `originalFilename`, `mediaType`, `sizeBytes`, `sha256`, `pageCount` nullable și `createdAt`. Rolul documentului într-un raport nu aparține resursei `Document`; el este stabilit pe asocierea `ReportDocument`.
 
-## 9. Criterion
+## 9. Extracția criteriilor
+
+### Pornirea jobului
+
+`POST /api/v1/projects/{projectId}/criterion-extraction-jobs` primește un
+`CriterionExtractionJobCreate` cu `documentIds`, o listă nevidă de documente
+care trebuie să aparțină proiectului. Operația cere `Idempotency-Key` și
+răspunde cu `202 Accepted`, `Location: /api/v1/analysis-jobs/{jobId}` și un
+`AnalysisJob` cu `kind=extract_criteria` și `status=queued`.
+
+AI-ul generează numai `CriterionProposal`. Nu creează direct `Criterion`, iar
+jobul nu șterge, nu dezactivează și nu înlocuiește criteriile existente. Un job
+nou adaugă un set nou, auditabil, de propuneri.
+
+### Citirea propunerilor
+
+`GET /api/v1/criterion-extraction-jobs/{jobId}/proposals` este paginat și poate
+fi citit după ce jobul are `status=succeeded`. Fiecare `CriterionProposal`
+conține:
+
+- identitatea jobului și proiectului;
+- o revizie stabilă a propunerii;
+- codul, descrierea și termenul propuse;
+- cel puțin un `SourceAnchor` complet cu `documentId`, `pageNumber` și `passage`;
+- review-ul uman, nullable cât timp propunerea este nerevizuită.
+
+Propunerile și review-urile nu sunt șterse după crearea criteriului. Pentru un
+job de alt tip sau unul care nu s-a încheiat cu succes, citirea produce `409`.
+
+### Review-ul propunerilor
+
+`POST /api/v1/criterion-extraction-jobs/{jobId}/proposal-reviews` primește un
+batch nevid de `CriterionProposalReview` și cere `Idempotency-Key`. Fiecare
+element indică `proposalId`, `proposalRevision` și o acțiune:
+
+- `accept`: creează un `Criterion` din propunerea nemodificată;
+- `correct`: cere valorile corectate, minimum un `SourceAnchor` complet și un
+  comentariu; creează un `Criterion` din valorile corectate. Ancorele corectate
+  trebuie să indice documentele selectate pentru job;
+- `reject`: cere un comentariu și nu creează `Criterion`.
+
+Batch-ul este atomic: fie toate review-urile și criteriile aferente sunt
+salvate, fie niciunul. Același `proposalId` nu poate apărea de două ori în
+batch. O propunere are un singur review final; o altă încercare produce
+`409 proposal_already_reviewed`, iar o revizie veche produce
+`409 stale_proposal_revision`.
+
+Dacă `accept` sau `correct` ar crea un cod deja folosit în proiect, întregul
+batch produce `409 criterion_code_conflict`. Verificarea replay-ului
+`Idempotency-Key` are loc înaintea verificării stării curente a propunerilor,
+astfel încât un replay valid returnează răspunsul original, nu
+`proposal_already_reviewed`.
+
+Replay-ul aceleiași chei cu același payload returnează răspunsul inițial și
+`Idempotency-Replayed: true`. Aceeași cheie cu alt payload produce
+`409 idempotency_conflict`.
+
+## 10. Criterion
 
 ### CriterionCreate
 
@@ -128,7 +188,7 @@ Răspunsul `Document` conține `id`, `projectId`, `displayName`, `originalFilena
 
 Adaugă `id`, `projectId`, `version`, `active`, `createdAt` și `updatedAt`. Crearea produce versiunea 1. Actualizarea și dezactivarea criteriilor nu fac parte din vertical slice.
 
-## 10. Report
+## 11. Report
 
 ### ReportCreate
 
@@ -158,9 +218,9 @@ Perechea (`externalSystem`, `externalId`) este unică în proiect când ambele v
 - `completed`: toate validările cerute au o decizie finală;
 - `analysis_failed`: ultimul job a eșuat; raportul poate fi reanalizat.
 
-## 11. AnalysisJob
+## 12. AnalysisJob
 
-### AnalysisJobCreate
+### AnalysisJobCreate pentru raport
 
 - `projectDocumentIds`: listă de documente de context ale aceluiași proiect, implicit goală;
 - `previousReportIds`: listă de rapoarte anterioare ale aceluiași proiect, implicit goală.
@@ -171,11 +231,21 @@ Crearea răspunde cu `202 Accepted`, `Location: /api/v1/analysis-jobs/{jobId}` �
 
 ### AnalysisJob
 
-Stările sunt `queued`, `running`, `succeeded`, `failed` și `cancelled`. Resursa conține `id`, `reportId`, selecțiile de context, `criteriaSnapshotVersion`, timestamps și, pentru eșec, o eroare sigură cu `code` și `message`. Mesajul nu include răspunsul brut al furnizorului, prompturi sau conținut din documente.
+Stările sunt `queued`, `running`, `succeeded`, `failed` și `cancelled`.
+Endpointul `GET /api/v1/analysis-jobs/{jobId}` este comun ambelor tipuri de job.
+Resursa conține `projectId`, `kind`, selecțiile de intrare, timestamps și,
+pentru eșec, o eroare sigură cu `code` și `message`.
+
+Pentru `kind=analyze_report`, `reportId` și `criteriaSnapshotVersion` sunt
+obligatorii, iar `documentIds` este gol. Pentru `kind=extract_criteria`,
+`reportId` și `criteriaSnapshotVersion` sunt null, `documentIds` este nevid,
+iar `proposalCount` devine numărul propunerilor după terminarea jobului.
+Mesajul de eroare nu include răspunsul brut al furnizorului, prompturi sau
+conținut din documente.
 
 Un job este respins cu `409 invalid_report_state` dacă raportul nu poate fi analizat sau cu `409 no_active_criteria` dacă proiectul nu are criterii active.
 
-## 12. CriterionValidation și SourceAnchor
+## 13. CriterionValidation și SourceAnchor
 
 Lista validărilor returnează implicit ultima revizie pentru fiecare criteriu. `includeHistory=true` include toate reviziile în ordine descrescătoare.
 
@@ -204,7 +274,7 @@ AI outcome și decizia utilizatorului sunt câmpuri diferite. Orice outcome fact
 
 `insufficient_evidence` poate avea o listă goală de ancore, deoarece nu afirmă o constatare factuală.
 
-## 13. UserDecision
+## 14. UserDecision
 
 ### UserDecisionCreate
 
@@ -219,7 +289,7 @@ O revizie modificată între citire și decizie produce `409 stale_validation_re
 
 Decizia nu creează task, autorizare sau clarificare externă. Comentariul poate recomanda utilizatorului un follow-up în MyADR/MySMIS, fără efect automat.
 
-## 14. Format comun de eroare
+## 15. Format comun de eroare
 
 Toate erorile folosesc `application/problem+json`:
 
@@ -252,13 +322,18 @@ Coduri comune:
 - `no_active_criteria` - 409;
 - `stale_validation_revision` - 409;
 - `decision_already_exists` - 409;
+- `invalid_analysis_job_kind` - 409;
+- `analysis_job_not_succeeded` - 409;
+- `proposal_already_reviewed` - 409;
+- `stale_proposal_revision` - 409;
+- `criterion_code_conflict` - 409;
 - `payload_too_large` - 413;
 - `unsupported_media_type` - 415;
 - `validation_error` - 422;
 - `internal_error` - 500;
 - `ai_unavailable` - 503.
 
-## 15. Exemple sintetice
+## 16. Exemple sintetice
 
 Fișierele din `contracts/examples/` sunt exemple normative de payload, fără date ADR reale:
 
@@ -269,6 +344,13 @@ Fișierele din `contracts/examples/` sunt exemple normative de payload, fără d
 | `document-upload.response.json` | `Document` |
 | `criterion-create.request.json` | `CriterionCreate` |
 | `criterion-create.response.json` | `Criterion` |
+| `criterion-extraction-job-create.request.json` | `CriterionExtractionJobCreate` |
+| `criterion-extraction-job.accepted.json` | `AnalysisJob` de extracție în starea `queued` |
+| `criterion-extraction-job.succeeded.json` | `AnalysisJob` de extracție în starea `succeeded` |
+| `criterion-proposals-list.response.json` | `PaginatedCriterionProposals` |
+| `criterion-proposal-reviews.request.json` | `CriterionProposalReviewBatch` |
+| `criterion-proposal-reviews.response.json` | `CriterionProposalReviewBatchResult` |
+| `criterion-proposal-review-conflict.response.json` | `ProblemDetails` pentru review duplicat |
 | `report-create.request.json` | `ReportCreate` |
 | `report-create.response.json` | `Report` |
 | `analysis-job-create.request.json` | `AnalysisJobCreate` |
@@ -281,7 +363,7 @@ Fișierele din `contracts/examples/` sunt exemple normative de payload, fără d
 
 Uploadul este `multipart/form-data`; de aceea este reprezentat numai răspunsul JSON, nu conținutul binar al requestului.
 
-## 16. Confidențialitate
+## 17. Confidențialitate
 
 - Exemplele API sunt integral sintetice.
 - Fotografii realizate la ADR și date reale nu sunt încărcate, copiate sau publicate.

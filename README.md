@@ -8,6 +8,10 @@ AI-ul propune; utilizatorul ia decizia finală. Sistemul nu emite decizii juridi
 
 - Există un singur actor de business: utilizatorul.
 - Un `Project` are `Document` și `Criterion`.
+- AI-ul extrage numai `CriterionProposal`; utilizatorul le acceptă, corectează
+  sau respinge înainte ca un `Criterion` să fie creat.
+- Extracția este append-only: nu șterge și nu înlocuiește criteriile existente,
+  iar propunerile și review-urile rămân auditabile.
 - Un `Project` primește `Report` periodice până la `monitoringEndDate`, data contractuală explicită.
 - Fiecare `Criterion` este verificat separat pentru fiecare `Report`.
 - O `CriterionValidation` aparține unui singur raport; validarea Raportului 2 nu o suprascrie pe cea a Raportului 1.
