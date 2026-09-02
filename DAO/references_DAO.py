@@ -3,9 +3,9 @@ from typing import Optional
 
 @dataclass
 class ReferenceDAO:
-    id: int
-    obligation_id: int
-    document_id: int
+    id: str
+    obligation_id: str
+    document_id: str
     page: Optional[int] = None
     text: Optional[str] = None
     chapter: Optional[str] = None
