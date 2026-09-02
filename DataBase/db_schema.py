@@ -22,7 +22,7 @@ def create_database_schema(con):
         type INTEGER NOT NULL,
         path TEXT);
 
-    CREATE TABLE IF NOT EXISTS references(
+    CREATE TABLE IF NOT EXISTS referinte(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         obligation_id INTEGER NOT NULL,
         document_id INTEGER NOT NULL,

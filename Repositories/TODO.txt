@@ -1,0 +1,23 @@
+TODO de completat toate repository
+
+SELECT : pentru moment done
+
+INSERT :
+
+document
+obligation
+project
+reference
+
+Update :
+
+obligation
+project ?
+
+
+DELETE :
+
+document
+obligation
+project
+reference

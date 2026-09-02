@@ -1,0 +1,11 @@
+TODO DE FACUT TOATE OBIECTELE
+document
+obligation
+project
+reference
+
+TODO DE FACUT FUNCTII LA DAO LA OBIECT
+document
+obligation
+project
+reference
