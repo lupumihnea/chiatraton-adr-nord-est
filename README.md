@@ -8,7 +8,7 @@ AI-ul propune; utilizatorul ia decizia finală. Sistemul nu emite decizii juridi
 
 - Există un singur actor de business: utilizatorul.
 - Un `Project` are `Document` și `Criterion`.
-- Un `Project` primește `Report` periodice până la data finalizării + `X` ani, unde `X` este configurabil.
+- Un `Project` primește `Report` periodice până la `monitoringEndDate`, data contractuală explicită.
 - Fiecare `Criterion` este verificat separat pentru fiecare `Report`.
 - O `CriterionValidation` aparține unui singur raport; validarea Raportului 2 nu o suprascrie pe cea a Raportului 1.
 - Fiecare constatare AI include cel puțin un `SourceAnchor` cu document, pagină și pasaj.
@@ -22,7 +22,7 @@ AI-ul propune; utilizatorul ia decizia finală. Sistemul nu emite decizii juridi
 - Emi deține AI-ul și integrarea Qwen.
 - Dragoș deține SQLite și eventuala migrare la PostgreSQL.
 
-UI-ul comunică numai prin API. API-ul accesează baza de date numai prin repository interfaces și accesează Qwen numai prin interfața `AIClient`. Numele modelului AI și adresa serviciului sunt configurabile; secretele nu intră în repository.
+UI-ul comunică numai prin API. API-ul accesează baza de date numai prin repository interfaces și accesează Qwen numai prin interfața `AIClient`. Numele modelului AI și adresa serviciului sunt configurabile; secretele nu intră în repository. ChIAtraton nu înlocuiește MyADR/MySMIS și nu execută task-uri, autorizări sau clarificări oficiale.
 
 ## Documentație
 
@@ -31,7 +31,10 @@ UI-ul comunică numai prin API. API-ul accesează baza de date numai prin reposi
 - [Modelul de date](docs/data-model.md)
 - [Arhitectura](docs/architecture.md)
 - [Indexul surselor și contradicțiilor](docs/source-index.md)
+- [Contractul HTTP API v1](contracts/http-api.md)
+- [OpenAPI 3.1](contracts/openapi.yaml)
 - [Contractul AI](contracts/ai-contract.md)
+- [Decizia pentru API v1](docs/decisions/ADR-api-v1.md)
 - [Decizii de arhitectură](docs/decisions/)
 
 ## Starea implementării

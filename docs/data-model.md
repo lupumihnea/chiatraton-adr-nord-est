@@ -9,7 +9,8 @@ erDiagram
     Project ||--o{ Document : contains
     Project ||--o{ Criterion : defines
     Project ||--o{ Report : receives
-    Report ||--|| Document : uploaded_as
+    Report ||--|{ ReportDocument : groups
+    Document ||--o{ ReportDocument : associated_as
     Report ||--o{ CriterionValidation : has
     Criterion ||--o{ CriterionValidation : checked_in
     CriterionValidation ||--|{ SourceAnchor : supported_by
@@ -26,8 +27,7 @@ erDiagram
 - `name`
 - `fundingCallId`
 - `completionDate`
-- `monitoringYears` - valoarea configurabilă `X`
-- `monitoringEndDate` - implicit `completionDate + monitoringYears`
+- `monitoringEndDate` - data contractuală explicită, egală cu sau ulterioară `completionDate`
 - `status`
 - `createdAt`, `updatedAt`
 
@@ -65,16 +65,23 @@ Un criteriu este versionat. Termenul canonic pentru contracte noi este `Criterio
 
 - `id`
 - `projectId`
-- `documentId`
 - `sequenceNumber`
-- `kind` - `implementation_progress`, `final_progress`, `durability` sau extensie controlată
+- `reportType` - `implementation_progress`, `final_progress` sau `durability`
 - `periodStart`, `periodEnd`
-- `submittedAt`
 - `criterionSetVersion`
-- `status`
+- `status` - stare internă controlată de ChIAtraton
+- `externalSystem`, `externalId`, `externalUrl`, `externalStatus`, opționale
 - `createdAt`, `finalizedAt`
 
-`sequenceNumber` este unic în cadrul proiectului. Raportul capturează versiunea criteriilor folosită la analiză.
+`sequenceNumber` este unic în cadrul proiectului. Raportul capturează versiunea criteriilor folosită la analiză. `externalStatus` este text opac și nu produce tranziții ale statusului intern.
+
+### ReportDocument
+
+- `reportId`
+- `documentId`
+- `role` - `main_report`, `final_document`, `attachment` sau `clarification`
+
+Asocierea este unică pentru perechea (`reportId`, `documentId`). Fiecare raport are exact un document primar: `main_report` sau `final_document`; celelalte documente sunt suport. Toate documentele asociate aparțin proiectului raportului.
 
 ### SourceAnchor
 
@@ -94,7 +101,7 @@ Un criteriu este versionat. Termenul canonic pentru contracte noi este `Criterio
 - `criterionId`
 - `criterionVersion`
 - `revision`
-- `aiProposedOutcome`
+- `aiOutcome`
 - `aiConfidence`, opțional și calibrat
 - `aiRationale`
 - `status`
@@ -109,12 +116,12 @@ Identitatea logică este (`reportId`, `criterionId`, `revision`). O validare nu 
 - `id`
 - `criterionValidationId`
 - `action`
-- `finalOutcome`, când acțiunea este o corectare sau confirmare
-- `comment`, opțional
+- `finalOutcome`, obligatoriu numai când acțiunea este `correct`
+- `comment`, obligatoriu pentru `correct` și `reject`
 - `decidedBy`
 - `decidedAt`
 
-Decizia aparține unei revizii precise de `CriterionValidation`. AI-ul nu poate crea `UserDecision`.
+Decizia aparține unei revizii precise de `CriterionValidation`. Acțiunea este `confirm`, `correct` sau `reject`. AI-ul nu poate crea `UserDecision`, iar decizia nu pornește o clarificare oficială în MyADR/MySMIS.
 
 ### AnalysisJob
 
@@ -139,6 +146,7 @@ Decizia aparține unei revizii precise de `CriterionValidation`. AI-ul nu poate 
 5. O `UserDecision` nu poate indica o validare ștearsă sau o altă revizie decât cea afișată utilizatorului.
 6. Validările și deciziile finalizate sunt append-only; corecțiile creează înregistrări noi legate de cele anterioare.
 7. Un `AnalysisJob.idempotencyKey` este unic în domeniul operației sale.
+8. Statusul intern al raportului este independent de `externalStatus`.
 
 ## 4. Păstrarea istoricului
 
@@ -148,7 +156,7 @@ Raportul 1 și Raportul 2 au identificatori diferiți și seturi diferite de val
 
 | Implementare existentă | Concept țintă | Observație |
 |---|---|---|
-| `projects` / `ProjectDAO` | `Project` | Lipsesc câmpurile explicite pentru `monitoringYears` și istoricul rapoartelor. |
+| `projects` / `ProjectDAO` | `Project` | Lipsește `monitoringEndDate` contractual explicit și istoricul rapoartelor. |
 | `documents` / `DocumentDAO` | `Document` | Relația cu `Project` trebuie proiectată într-o migrare ulterioară. |
 | `obligations` / `ObligationDAO` | `Criterion` | Pentru contracte noi se folosește `criteria`. |
 | `references` / `ReferenceDAO` | `SourceAnchor` | Câmpurile pagină și text oferă o bază, dar constrângerile obligatorii trebuie întărite ulterior. |

@@ -8,6 +8,7 @@ Sistemul folosește limite explicite între prezentare, API, domeniu, persisten�
 flowchart LR
     U[Utilizator] --> UI[NiceGUI UI/UX]
     UI -->|HTTP/JSON| API[API]
+    EXT[MyADR / MySMIS] -. metadate externe .-> API
     API --> APP[Servicii de aplicație]
     APP --> DOMAIN[Model de domeniu]
     APP --> RI[Repository interfaces]
@@ -16,6 +17,8 @@ flowchart LR
     APP --> AIC[AIClient]
     AIC --> QW[Qwen adapter]
 ```
+
+MyADR/MySMIS rămân sistemele oficiale pentru task-uri, priorități, distribuire, validare, autorizare și clarificări. În acest slice, ChIAtraton păstrează numai metadatele externe necesare trasabilității și nu execută acțiuni în aceste sisteme.
 
 ## 2. Reguli de dependență
 
@@ -26,6 +29,7 @@ flowchart LR
 5. API-ul accesează Qwen numai prin interfața `AIClient`.
 6. Domeniul nu depinde de NiceGUI, SQLite, PostgreSQL sau SDK-ul Qwen.
 7. Adaptoarele implementează interfețele definite spre interiorul aplicației.
+8. Statusul intern al unui `Report` nu este derivat automat din `externalStatus`.
 
 ## 3. Componente
 

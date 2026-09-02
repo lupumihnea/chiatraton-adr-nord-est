@@ -13,7 +13,7 @@ AI-ul propune; utilizatorul ia decizia finală.
 
 Pentru fiecare criteriu analizat, AI-ul propune un rezultat și o explicație într-o `CriterionValidation`. Fiecare constatare are cel puțin un `SourceAnchor` cu `documentId`, `pageNumber` și `passage`. Fără aceste trei elemente, starea este `insufficient_evidence`.
 
-Numai utilizatorul poate crea o `UserDecision`: `confirmed`, `corrected`, `rejected` sau `clarification_requested`. Qwen și `AnalysisJob` nu pot finaliza o decizie.
+Numai utilizatorul poate crea o `UserDecision` cu acțiunea `confirm`, `correct` sau `reject`. Qwen și `AnalysisJob` nu pot finaliza o decizie. Un comentariu poate recomanda un follow-up extern, dar ChIAtraton nu pornește o clarificare oficială în MyADR/MySMIS.
 
 ## Consecințe
 

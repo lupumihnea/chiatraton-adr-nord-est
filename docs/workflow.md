@@ -13,12 +13,12 @@ flowchart TD
     U2 --> J1[AnalysisJob extrage propuneri de Criterion prin AIClient]
     J1 --> U3[Utilizatorul confirmă sau corectează Criterion]
     U3 --> B1[Bază de monitorizare versionată]
-    B1 --> U4[Utilizatorul încarcă Report periodic]
+    B1 --> U4[Utilizatorul selectează documentele unui Report periodic]
     U4 --> J2[AnalysisJob analizează raportul]
     J2 --> V1[Câte o CriterionValidation pentru fiecare Criterion]
     V1 --> S1[Constatări cu SourceAnchor]
     S1 --> U5[Utilizatorul verifică propunerile]
-    U5 --> D1[UserDecision: confirmă, corectează, respinge sau cere clarificări]
+    U5 --> D1[UserDecision: confirmă, corectează sau respinge]
     D1 --> H1[API salvează raportul și istoricul fără suprascriere]
     H1 --> E{Perioada raportului atinge monitoringEndDate?}
     E -- Nu --> W[Așteaptă următorul Report]
@@ -38,24 +38,20 @@ flowchart TD
 
 ## 4. Ciclul unui raport
 
-1. Utilizatorul încarcă raportul periodic curent.
-2. API-ul creează `Report`, asociază documentul încărcat și capturează snapshot-ul criteriilor active.
+1. Utilizatorul încarcă documentul principal și eventualele documente suport ale raportului periodic curent.
+2. API-ul creează `Report`, asociază exact un document primar (`main_report` sau `final_document`) și zero sau mai multe documente suport (`attachment` sau `clarification`).
 3. API-ul creează un `AnalysisJob` idempotent.
-4. Qwen este apelat numai prin `AIClient`.
+4. Jobul capturează snapshot-ul criteriilor active și selecțiile explicite de documente ale proiectului și rapoarte anterioare; Qwen este apelat numai prin `AIClient`.
 5. Pentru fiecare criteriu din snapshot, AI-ul returnează o propunere separată.
 6. API-ul validează structura fiecărei propuneri și prezența `SourceAnchor`.
 7. API-ul creează câte o `CriterionValidation` pentru fiecare pereche raport-criteriu.
 8. UI-ul afișează propunerile și poate ordona excepțiile primele.
 9. Utilizatorul ia o `UserDecision` explicită asupra fiecărei validări necesare finalizării.
-10. API-ul finalizează raportul și păstrează revizia, propunerile, sursele și deciziile.
+10. API-ul finalizează raportul și păstrează revizia, propunerile, sursele și deciziile. Nu actualizează statusul oficial și nu pornește clarificări în MyADR/MySMIS.
 
 ## 5. Continuitatea raportării
 
-Un proiect primește rapoarte periodice până la:
-
-`monitoringEndDate = completionDate + monitoringYears`
-
-`monitoringYears` reprezintă `X` și este configurabil per proiect sau apel. Aplicația poate reprezenta cadențe diferite: de exemplu, rapoarte trimestriale în implementare și rapoarte anuale post-implementare. Cadența nu schimbă regula de izolare a validărilor.
+Un proiect primește rapoarte periodice până la `monitoringEndDate`, data contractuală explicită înregistrată pe proiect. Aplicația poate reprezenta cadențe diferite: de exemplu, rapoarte trimestriale în implementare și rapoarte anuale post-implementare. Cadența nu schimbă regula de izolare a validărilor.
 
 La atingerea datei-limită, sistemul propune închiderea monitorizării, dar utilizatorul confirmă acțiunea. Orice abatere cerută de contract trebuie înregistrată explicit, nu ascunsă într-o valoare implicită.
 
@@ -71,9 +67,11 @@ La atingerea datei-limită, sistemul propune închiderea monitorizării, dar uti
 
 `AnalysisJob`: `queued`, `running`, `succeeded`, `failed`, `cancelled`.
 
-`CriterionValidation`: `proposed`, `awaiting_user`, `decided`, `insufficient_evidence`, `analysis_failed`.
+`Report.status`: `created`, `analysis_queued`, `analysis_in_progress`, `awaiting_user_decision`, `completed`, `analysis_failed`. Acesta este independent de `externalStatus`, care rămâne text opac.
 
-`UserDecision`: `confirmed`, `corrected`, `rejected`, `clarification_requested`.
+`CriterionValidation`: `awaiting_user_decision`, `decided`, `insufficient_evidence`, `analysis_failed`.
+
+`UserDecision.action`: `confirm`, `correct`, `reject`.
 
 ## 8. Reguli de eroare
 
