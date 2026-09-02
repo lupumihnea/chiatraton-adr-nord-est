@@ -153,3 +153,17 @@ Raportul 1 și Raportul 2 au identificatori diferiți și seturi diferite de val
 | `obligations` / `ObligationDAO` | `Criterion` | Pentru contracte noi se folosește `criteria`. |
 | `references` / `ReferenceDAO` | `SourceAnchor` | Câmpurile pagină și text oferă o bază, dar constrângerile obligatorii trebuie întărite ulterior. |
 | fără echivalent | `Report`, `CriterionValidation`, `UserDecision`, `AnalysisJob` | Necesită design DB și migrare aprobate de responsabilul DB. |
+
+## 6. Extensie implementată în MVP
+
+Pentru integrarea efectivă, schema SQLite adaugă fără a șterge datele legacy:
+
+- `project_documents(project_id, document_id, role)` pentru izolarea documentelor per proiect;
+- `reports` pentru raportul periodic selectat în task;
+- `analysis_jobs` pentru execuții/revizii idempotente;
+- `criterion_validations` pentru rezultatul per raport + criteriu + revizie;
+- `validation_sources` pentru cele două/mai multe pasaje folosite la comparație;
+- `user_decisions` append-only;
+- `generated_outputs` pentru nota de verificare/drafturile exportate.
+
+În această implementare, `obligation` rămâne reprezentarea fizică legacy a conceptului `Criterion`, iar `references` rămâne reprezentarea fizică a sursei criteriului. UI/API folosesc terminologia de produs acolo unde nu ar rupe compatibilitatea cu prototipul existent.

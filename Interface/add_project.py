@@ -1,37 +1,39 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from nicegui import ui
+from API.monitoring_api import MonitoringAPI
+
+api = MonitoringAPI()
+
 
 @ui.page('/add_project')
 def add_project_page():
-    with ui.column().classes('w-full items-center mt-8 space-y-8 min-h-[75vh]'):
-        ui.label('Adaugă un nou proiect').classes('text-3xl font-bold')
+    with ui.column().classes('w-full max-w-3xl mx-auto mt-8 gap-5 p-6'):
+        ui.label('Adaugă / actualizează proiect').classes('text-3xl font-bold')
+        project_code = ui.number('Codul proiectului (6 cifre)', min=100000, max=999999).classes('w-full')
+        call_id = ui.number('Call ID').classes('w-full')
+        time_ending = ui.input('Data finalizării', placeholder='2025-07-23').classes('w-full')
+        name = ui.input('Nume proiect').classes('w-full')
 
-        with ui.column().classes('w-full max-w-2xl space-y-4'):
-            project_code = ui.input('Codul proiectului').props('outlined').classes('w-full')
+        def save_project():
+            try:
+                api.upsert_project(
+                    project_id=int(project_code.value),
+                    call_id=int(call_id.value) if call_id.value is not None else None,
+                    time_ending=time_ending.value or None,
+                    name=name.value or None,
+                )
+                ui.notify('Proiect salvat.', type='positive')
+                ui.navigate.to(f'/project/{int(project_code.value)}')
+            except Exception as exc:
+                ui.notify(str(exc), type='negative')
 
-            ui.label('Fișiere obligatorii').classes('text-xl font-semibold mt-4')
-            
-            with ui.row().classes('w-full items-center gap-4'):
-                ui.label('Ghid al apelului:').classes('w-1/3')
-                ui.upload(label='Încărcați Ghid al apelului (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
-
-            with ui.row().classes('w-full items-center gap-4'):
-                ui.label('Contract de finanțare:').classes('w-1/3')
-                ui.upload(label='Încărcați Contract de finanțare (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
-
-            ui.label('Alte fișiere PDF').classes('text-xl font-semibold mt-4')
-            
-            uploads_container = ui.column().classes('w-full space-y-4')
-            
-            def add_upload():
-                with uploads_container:
-                    row = ui.row().classes('w-full items-center gap-4')
-                    with row:
-                        file_type = ui.input('Nume/Tip fișier').props('outlined').classes('w-1/3')
-                        upload = ui.upload(label='Încărcați fișier (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
-                        ui.button(icon='delete', on_click=lambda r=row: r.delete()).props('flat color="negative"')
-
-            ui.button('Adaugă fișier suplimentar', icon='add', on_click=add_upload).props('flat')
-
-            ui.button('Salvează Proiect', color='primary', on_click=lambda: ui.notify('Proiect salvat!')).classes('w-full mt-8')
-            
-            ui.button('Înapoi', on_click=lambda: ui.navigate.to('/')).props('flat').classes('w-full mt-2')
+        ui.button('Salvează proiect', on_click=save_project).classes('w-full').props('no-caps')
+        ui.button('Înapoi', on_click=lambda: ui.navigate.to('/')).props('flat no-caps').classes('w-full')

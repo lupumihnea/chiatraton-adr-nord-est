@@ -1,37 +1,36 @@
-from enum import Enum
-from logging import CRITICAL
-from unittest import case
+from enum import IntEnum
 
-from Importance import *
+from Objects.Importance import Importance
 
-class DocType(Enum):
-    anex=0
-    guide=1
-    plan_monitor=2
-    graph=3
-    plan_achizitii=4
-    plan_afaceri=5
-    cerere_finantare=6
-    other=7
 
-def from_int_to_type(type:int):
-    return DocType(type)
+class DocType(IntEnum):
+    financing_application = 1
+    business_plan = 2
+    business_plan_annex = 3
+    monitoring_plan = 4
+    procurement_plan = 5
+    payment_schedule = 6
+    progress_report = 7
+    beneficiary_manual = 8
+    funding_guide = 9
+    contract = 10
+    addendum = 11
+    declaration = 12
+    other = 99
 
-#TODO de pus ce nivel de importanta are fiecare tip de document
-def from_type_to_importance(type:DocType)-> Importance:
-    if type == DocType.anex:
-        return Importance.Critical
-    if type == DocType.guide:
-        return Importance.Critical
-    if type == DocType.plan_monitor:
-        return Importance.Critical
-    if type == DocType.graph:
-        return Importance.Critical
-    if type == DocType.plan_achizitii:
-        return Importance.Critical
-    if type == DocType.plan_afaceri:
-        return Importance.Critical
-    if type == DocType.cerere_finantare:
-        return Importance.Critical
-    if type == DocType.other:
-        return Importance.Low
+    # Legacy aliases retained for old UI/code.
+    cerere_finantare = 1
+    plan_afaceri = 2
+    anex = 3
+    plan_monitor = 4
+    plan_achizitii = 5
+    graph = 6
+    guide = 9
+
+
+def from_int_to_type(type_: int) -> DocType:
+    return DocType(type_)
+
+
+def from_type_to_importance(type_: DocType) -> Importance:
+    return Importance.Low if type_ == DocType.other else Importance.Critical
