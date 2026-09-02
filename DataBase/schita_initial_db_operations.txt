@@ -1,0 +1,38 @@
+# get
+# 1. get a list of projects done
+# 2 get all obligations from a certain project, sorted by importance in reverse order, input is a project_id done
+# 3 get all references that an obligation is based on, input is a obligation_id
+# 4 get a document that a reference is based on, input is a reference_id
+
+
+from DAO.documents_DAO import DocumentDAO
+from DAO.references_DAO import ReferenceDAO
+
+
+# post
+# 1 add a project
+# 2 add an  obligation
+# 3 add a document
+# 4 add a reference
+
+# patch
+# 1. modify the importance of an obligation
+# 2. TODO
+
+# delete
+# 1. delete a project
+# 2. delete a document
+# 3. extra : delete a reference
+# 4. delete an obligation
+
+
+# method of working, the all functions will have a CURSOR
+# the saving of changes, along with the eventual closing of the cursor will be done
+# OUTSIDE THE CRUD OPERATION FUNCTION
+# The select (get) functions will return a DAO of that certain row
+
+
+
+
+
+

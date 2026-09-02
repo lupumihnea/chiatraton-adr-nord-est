@@ -1,0 +1,11 @@
+TODO DE FACUT DTOS PENTRU TOATE OBIECTELE
+document
+obligation
+project
+reference
+
+TODO DE FACUT FUNCTII LA OBIECT LA DTO
+document
+obligation
+project
+reference
