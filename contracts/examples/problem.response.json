@@ -1,0 +1,16 @@
+{
+  "type": "https://chiatraton.example/problems/validation-error",
+  "title": "Request validation failed",
+  "status": 422,
+  "detail": "One or more fields are invalid.",
+  "instance": "/api/v1/projects",
+  "code": "validation_error",
+  "requestId": "req_synthetic_0001",
+  "errors": [
+    {
+      "field": "monitoringEndDate",
+      "code": "date_order",
+      "message": "monitoringEndDate must be on or after completionDate."
+    }
+  ]
+}

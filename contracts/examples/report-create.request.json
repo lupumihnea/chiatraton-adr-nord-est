@@ -1,0 +1,19 @@
+{
+  "reportType": "implementation_progress",
+  "periodStart": "2027-01-01",
+  "periodEnd": "2027-03-31",
+  "documents": [
+    {
+      "documentId": "33333333-3333-4333-8333-333333333333",
+      "role": "main_report"
+    },
+    {
+      "documentId": "44444444-4444-4444-8444-444444444444",
+      "role": "attachment"
+    }
+  ],
+  "externalSystem": "other",
+  "externalId": "SYNTH-2027-Q1",
+  "externalUrl": "https://example.invalid/external-reports/SYNTH-2027-Q1",
+  "externalStatus": "received_for_review"
+}
