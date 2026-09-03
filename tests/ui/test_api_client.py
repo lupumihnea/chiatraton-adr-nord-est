@@ -220,3 +220,59 @@ def test_upload_fingerprint_changes_with_content_or_display_name() -> None:
     assert retry == first
     assert changed_content != first
     assert changed_name != first
+
+
+@pytest.mark.anyio
+async def test_progress_report_client_uses_existing_report_contract() -> None:
+    seen: list[tuple[str, str, dict]] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(await request.aread()) if request.method == "POST" else {}
+        seen.append((request.method, request.url.path, payload))
+        if request.url.path.endswith("/reports"):
+            return httpx.Response(201, json={"id": "00000000-0000-4000-8000-000000000010"})
+        if request.url.path.endswith("/analysis-jobs"):
+            return httpx.Response(202, json={"id": "00000000-0000-4000-8000-000000000011"})
+        raise AssertionError(f"Unexpected request: {request.url}")
+
+    client = ChIAtratonAPIClient(
+        base_url="http://api.test",
+        bearer_token="synthetic-token",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        report = await client.create_project_report(
+            "00000000-0000-4000-8000-000000000001",
+            period_start="2030-01-01",
+            period_end="2030-03-31",
+            document_id="00000000-0000-4000-8000-000000000002",
+            idempotency_key="report-key",
+        )
+        job = await client.create_report_analysis_job(
+            report["id"],
+            idempotency_key="analysis-key",
+        )
+    finally:
+        await client.close()
+
+    assert job["id"] == "00000000-0000-4000-8000-000000000011"
+    assert seen[0] == (
+        "POST",
+        "/api/v1/projects/00000000-0000-4000-8000-000000000001/reports",
+        {
+            "reportType": "implementation_progress",
+            "periodStart": "2030-01-01",
+            "periodEnd": "2030-03-31",
+            "documents": [
+                {
+                    "documentId": "00000000-0000-4000-8000-000000000002",
+                    "role": "main_report",
+                }
+            ],
+        },
+    )
+    assert seen[1] == (
+        "POST",
+        "/api/v1/reports/00000000-0000-4000-8000-000000000010/analysis-jobs",
+        {"projectDocumentIds": [], "previousReportIds": []},
+    )

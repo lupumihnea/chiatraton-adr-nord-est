@@ -6,6 +6,7 @@ def test_long_running_pages_flush_before_network_work() -> None:
     criteria = (root / "Interface" / "criteria_review.py").read_text(encoding="utf-8")
     project = (root / "Interface" / "project_details.py").read_text(encoding="utf-8")
     main = (root / "Interface" / "main.py").read_text(encoding="utf-8")
+    report = (root / "Interface" / "report_analysis.py").read_text(encoding="utf-8")
 
     assert "async def criteria_review_page" in criteria
     assert "await ui.context.client.connected(timeout=10.0)" in criteria
@@ -16,3 +17,6 @@ def test_long_running_pages_flush_before_network_work() -> None:
 
     assert "async def home" in main
     assert "await ui.context.client.connected(timeout=10.0)" in main
+
+    assert "async def report_analysis_page" in report
+    assert "await ui.context.client.connected(timeout=10.0)" in report

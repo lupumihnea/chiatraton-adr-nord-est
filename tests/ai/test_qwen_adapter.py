@@ -195,3 +195,51 @@ async def test_qwen_adapter_uses_exact_local_source_text(monkeypatch):
     assert result[0].source_anchors
     assert result[0].source_anchors[0].document_id == report_document_id
     assert result[0].source_anchors[0].passage in report_text
+
+
+@pytest.mark.asyncio
+async def test_progress_report_never_creates_obligation_proposals(monkeypatch):
+    project_id = uuid4()
+    report_document_id = uuid4()
+    now = datetime.now(UTC)
+    report_document = Document(
+        id=report_document_id,
+        project_id=project_id,
+        display_name="Rapoarte de progres",
+        original_filename="raport-progres.pdf",
+        media_type=DocumentMediaType.PDF,
+        size_bytes=100,
+        sha256="c" * 64,
+        page_count=1,
+        created_at=now,
+    )
+
+    def unexpected_parse(*args, **kwargs):
+        raise AssertionError("A progress report must not enter obligation extraction")
+
+    monkeypatch.setattr("AI.qwen_adapter.parse_document_bytes", unexpected_parse)
+
+    async def loader(handle: str):
+        return handle.encode()
+
+    llm = StubLLM()
+    adapter = QwenAIAdapter(
+        content_loader=loader,
+        model="qwen/qwen3-235b-a22b-2507",
+        base_url="https://example.invalid/api/v1",
+        api_key="synthetic-key",
+        llm=llm,
+        embedder=StubEmbedder(),
+    )
+
+    result = await adapter.extract(
+        CriterionExtractionRequest(
+            job_id=uuid4(),
+            project_id=project_id,
+            documents=(AIInputDocument(report_document, "report"),),
+            idempotency_key="synthetic-progress-report",
+        )
+    )
+
+    assert result == []
+    assert llm.calls == 0

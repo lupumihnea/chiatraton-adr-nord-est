@@ -1,8 +1,9 @@
 # ChIAtraton - ADR Nord-Est
 
 ChIAtraton este un AI verification workspace pentru raportul periodic selectat. Aplicația
-organizează proiectele, documentele, criteriile, rapoartele și dovezile, iar AI-ul propune
-constatări pe care utilizatorul le confirmă, corectează sau respinge. Nu înlocuiește
+organizează proiectele, documentele, obligațiile proiectului, rapoartele și dovezile, iar AI-ul
+propune obligații din documentele-sursă și evaluează progresul raportat față de obligațiile
+confirmate. Nu înlocuiește
 MyADR/MySMIS și nu execută task-uri, autorizări ori clarificări oficiale.
 
 Implementarea curentă oferă întregul workflow HTTP API v1 în modul
@@ -114,7 +115,8 @@ $env:CHIATRATON_REPORT_ANALYZER_BACKEND="qwen"
 $env:AI_PROVIDER="qwen"
 $env:AI_MODEL_NAME="qwen/qwen3-235b-a22b-2507"
 $env:AI_BASE_URL="https://openrouter.ai/api/v1"
-$env:AI_API_KEY="CHEIA_TA_NOUA"
+$secureKey = Read-Host "OpenRouter API key" -AsSecureString
+$env:AI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
 $env:AI_CONTRACT_VERSION="1.0"
 ```
 
@@ -122,6 +124,25 @@ Modelul nu furnizează direct pasajele persistate. El returnează pointeri cătr
 source-units, iar adaptorul reconstruiește local pasajul exact și pagina înainte ca
 API-ul să creeze `CriterionProposal` sau `CriterionValidation`. Detalii în
 `docs/ai-implementation.md`.
+
+## Comportamentul AI pe categoriile existente de documente
+
+Categoriile din interfață rămân neschimbate și nu necesită modificări de schemă. Intern,
+contractul API continuă să folosească numele `Criterion` / `CriterionValidation`; în UI acestea
+sunt prezentate drept **obligații** și **progres față de obligații**.
+
+| Categoria din UI | Comportament |
+|---|---|
+| `Documente legate de apel` | AI caută obligații/reguli monitorizabile aplicabile beneficiarului/proiectului și propune obligații pentru review uman. |
+| `Documente inițiale` | AI caută angajamente specifice proiectului: indicatori, ținte, termene, milestone-uri, angajamente de punctaj etc. |
+| `Rapoarte de progres` | Nu intră în extractorul de obligații. Se creează un `Report`, apoi AI verifică progresul față de obligațiile deja confirmate și produce `CriterionValidation`. |
+| `Alte documente` | Sunt păstrate ca documente suport și nu generează automat obligații. |
+
+Pentru `Rapoarte de progres`, UI cere numai perioada raportată (`De la` / `Până la`), câmpuri
+deja cerute de contractul `Report`. Dacă nu există încă obligații confirmate, raportul rămâne
+salvat cu status `created`; analiza poate fi pornită ulterior din pagina proiectului după review-ul
+obligațiilor. Dacă obligațiile există deja, analiza pornește automat când este încărcat un singur
+raport de progres.
 
 ## Matrice endpoint-uri
 
@@ -149,9 +170,10 @@ de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnaly
 
 ## Reguli importante
 
-- AI-ul creează `CriterionProposal`, nu `Criterion`; numai review-ul utilizatorului poate
-  crea criterii.
-- Review-ul batch este atomic. `accept` și `correct` creează criterii, `reject` nu creează.
+- În termenii interfeței, AI-ul propune **obligații**. Contractul intern rămâne neschimbat:
+  AI-ul creează `CriterionProposal`, nu `Criterion`; numai review-ul utilizatorului poate crea
+  obligația confirmată (`Criterion`).
+- Review-ul batch este atomic. `accept` și `correct` creează obligații confirmate, `reject` nu creează.
 - Fiecare propunere și fiecare constatare factuală are `SourceAnchor` cu document, pagină
   și pasaj.
 - O reanalizare adaugă o nouă revizie de `CriterionValidation`; istoricul și deciziile
@@ -171,7 +193,8 @@ python -m compileall -q app tests Interface
 
 Testele validează și contractul OpenAPI 3.1, exemplele JSON, JWT, ProblemDetails,
 idempotency și întregul workflow Project → Document → CriterionProposal → Criterion →
-Report → AnalysisJob → CriterionValidation → UserDecision.
+Report → AnalysisJob → CriterionValidation → UserDecision. În UI, acest flux este prezentat ca
+Documente-sursă → Obligații → Raport de progres → Progres față de obligații.
 
 ## Limitări și următoarele adaptoare
 
