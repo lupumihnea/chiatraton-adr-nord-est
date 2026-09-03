@@ -52,15 +52,13 @@ async def home() -> None:
             )
 
         with ui.column().classes("w-full max-w-xl items-start space-y-4"):
-            project_select = ui.select(
-                options={},
-                with_input=True,
+            search_bar = ui.input(
+                placeholder="Introdu numele sau UUID-ul proiectului..."
             ).props(
-                'rounded outlined clearable options-dense use-input hide-selected '
-                'fill-input placeholder="Selectează proiectul după nume și UUID" '
-                'aria-label="Selectează proiectul după nume și UUID" '
+                "rounded outlined clearable "
                 'input-class="text-2xl font-bold text-center"'
             ).classes("w-full text-2xl bg-white shadow-xl rounded-full border-0")
+            search_bar.disable()
 
             ui.button(
                 "Adaugă un nou proiect",
@@ -77,9 +75,45 @@ async def home() -> None:
             ui.label("Se încarcă proiectele...")
 
         def access_project() -> None:
-            project_id = project_select.value
-            if not project_id:
-                ui.notify("Selectează un proiect.", type="warning", position="top")
+            query = str(search_bar.value or "").strip()
+            if not query:
+                ui.notify(
+                    "Introdu numele sau UUID-ul proiectului.",
+                    type="warning",
+                    position="top",
+                )
+                return
+
+            project_id = next(
+                (
+                    str(project["id"])
+                    for project in projects
+                    if str(project.get("id", "")).casefold() == query.casefold()
+                ),
+                None,
+            )
+            if project_id is None:
+                name_matches = [
+                    project
+                    for project in projects
+                    if str(project.get("name", "")).casefold() == query.casefold()
+                ]
+                if len(name_matches) == 1:
+                    project_id = str(name_matches[0]["id"])
+                elif len(name_matches) > 1:
+                    ui.notify(
+                        "Există mai multe proiecte cu acest nume. Folosește UUID-ul.",
+                        type="warning",
+                        position="top",
+                    )
+                    return
+
+            if project_id is None:
+                ui.notify(
+                    "Proiectul nu a fost găsit.",
+                    type="negative",
+                    position="top",
+                )
                 return
             ui.navigate.to(f"/project/{project_id}")
 
@@ -91,6 +125,7 @@ async def home() -> None:
         )
         ui.space()
 
+        projects: list[dict[str, object]] = []
         try:
             projects = await api_client.list_all_projects()
         except Exception as error:
@@ -100,15 +135,9 @@ async def home() -> None:
                 position="top",
                 timeout=8000,
             )
-        else:
-            project_select.options = {
-                str(project["id"]): f'{project["name"]} — {project["id"]}'
-                for project in projects
-                if project.get("id") and project.get("name")
-            }
-            project_select.update()
         finally:
             loading.set_visibility(False)
+            search_bar.enable()
 
 
 if __name__ in {"__main__", "__mp_main__"}:
