@@ -1,7 +1,6 @@
-"""NiceGUI entry point preserving Andrei's current visual design."""
+"""NiceGUI entry point based directly on Andrei's supplied interface."""
 
 import os
-from pathlib import Path
 
 from nicegui import app, ui
 
@@ -9,32 +8,34 @@ from Interface import add_project, project_details, upload_documents
 from Interface.api_client import api_client, api_error_message
 
 _REGISTERED_PAGE_MODULES = (add_project, project_details, upload_documents)
-ASSETS_DIR = Path(__file__).with_name("Assets")
 
+# Includem fontul și fundalul definite în interfața furnizată de Andrei.
 ui.add_head_html(
     """
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700;800"
+    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@500;700;800&display=swap"
           rel="stylesheet">
     <style>
         body {
-            font-family: 'Quicksand', ui-sans-serif, system-ui, sans-serif;
+            font-family: 'Quicksand', sans-serif;
             background-color: #fffdf5;
         }
     </style>
     """,
     shared=True,
 )
-app.add_static_files("/Assets", str(ASSETS_DIR))
+
+assets_dir = os.path.join(os.path.dirname(__file__), "Assets")
+app.add_static_files("/Assets", assets_dir)
 app.on_shutdown(api_client.close)
 
 
 @ui.page("/")
 async def home() -> None:
-    """List projects through the API in Andrei's current landing-page design."""
+    """Render Andrei's landing page and populate it from the HTTP API."""
 
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
-    with ui.column().classes("w-full items-center mt-8 gap-6 min-h-[85vh]"):
+    with ui.column().classes("w-full items-center mt-8 space-y-6 min-h-[85vh]"):
         ui.image("/Assets/Logo-ADR.png").classes(
             "w-64 transition-transform hover:scale-105 duration-300 drop-shadow-sm"
         )
@@ -50,16 +51,16 @@ async def home() -> None:
                 "text-lg font-extrabold text-gray-700 mx-3"
             )
 
-        with ui.column().classes("w-full max-w-xl items-start gap-4"):
+        with ui.column().classes("w-full max-w-xl items-start space-y-4"):
             project_select = ui.select(
                 options={},
-                label="Selectează proiectul după nume și UUID",
                 with_input=True,
             ).props(
-                "rounded outlined clearable options-dense "
-                'input-class="text-lg font-bold"'
-            ).classes("w-full text-lg bg-white shadow-xl rounded-full border-0")
-            project_select.disable()
+                'rounded outlined clearable options-dense use-input hide-selected '
+                'fill-input placeholder="Selectează proiectul după nume și UUID" '
+                'aria-label="Selectează proiectul după nume și UUID" '
+                'input-class="text-2xl font-bold text-center"'
+            ).classes("w-full text-2xl bg-white shadow-xl rounded-full border-0")
 
             ui.button(
                 "Adaugă un nou proiect",
@@ -75,32 +76,30 @@ async def home() -> None:
             ui.spinner(size="md")
             ui.label("Se încarcă proiectele...")
 
-        status_label = ui.label().classes("text-sm text-gray-500")
-        status_label.set_visibility(False)
-
         def access_project() -> None:
-            if not project_select.value:
+            project_id = project_select.value
+            if not project_id:
                 ui.notify("Selectează un proiect.", type="warning", position="top")
                 return
-            ui.navigate.to(f"/projects/{project_select.value}")
+            ui.navigate.to(f"/project/{project_id}")
 
-        access_button = ui.button(
-            "Accesează",
-            on_click=access_project,
-        ).props("push rounded size=xl color=primary").classes(
+        ui.button("Accesează", on_click=access_project).props(
+            "push rounded size=xl color=primary"
+        ).classes(
             "w-64 py-4 mt-4 text-2xl font-extrabold shadow-xl hover:scale-105 "
             "transition-transform duration-200 text-gray-900"
         )
-        access_button.disable()
         ui.space()
 
         try:
             projects = await api_client.list_all_projects()
         except Exception as error:
-            status_label.text = "Proiectele nu au putut fi încărcate."
-            status_label.classes(replace="text-sm font-bold text-red-700")
-            status_label.set_visibility(True)
-            ui.notify(api_error_message(error), type="negative", position="top", timeout=8000)
+            ui.notify(
+                api_error_message(error),
+                type="negative",
+                position="top",
+                timeout=8000,
+            )
         else:
             project_select.options = {
                 str(project["id"]): f'{project["name"]} — {project["id"]}'
@@ -108,19 +107,13 @@ async def home() -> None:
                 if project.get("id") and project.get("name")
             }
             project_select.update()
-            if project_select.options:
-                project_select.enable()
-                access_button.enable()
-            else:
-                status_label.text = "Nu există încă proiecte."
-                status_label.set_visibility(True)
         finally:
             loading.set_visibility(False)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
-        title="ChIAtraton",
+        title="ADR Analizator",
         host=os.getenv("CHIATRATON_UI_HOST", "127.0.0.1"),
         port=int(os.getenv("CHIATRATON_UI_PORT", "8081")),
         reload=False,
