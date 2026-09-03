@@ -1,50 +1,160 @@
 # ChIAtraton - ADR Nord-Est
 
-ChIAtraton este un **AI Monitoring Copilot pentru ADR Nord-Est**. Aplicația ajută utilizatorul să monitorizeze proiecte finanțate, să compare fiecare raport periodic cu criteriile proiectului și să păstreze o urmă auditabilă a constatărilor.
+ChIAtraton este un AI verification workspace pentru raportul periodic selectat. Aplicația
+organizează proiectele, documentele, criteriile, rapoartele și dovezile, iar AI-ul propune
+constatări pe care utilizatorul le confirmă, corectează sau respinge. Nu înlocuiește
+MyADR/MySMIS și nu execută task-uri, autorizări ori clarificări oficiale.
 
-AI-ul propune; utilizatorul ia decizia finală. Sistemul nu emite decizii juridice și nu înlocuiește verificarea umană.
+Implementarea curentă oferă întregul workflow HTTP API v1 în modul
+`development`: servicii de aplicație reale, repository-uri și stocare de documente în
+memorie, joburi locale și două adaptoare AI fake deterministe. Toate exemplele și
+fixture-urile sunt sintetice.
 
-## Principii de produs
+## Instalare
 
-- Există un singur actor de business: utilizatorul.
-- Un `Project` are `Document` și `Criterion`.
-- AI-ul extrage numai `CriterionProposal`; utilizatorul le acceptă, corectează
-  sau respinge înainte ca un `Criterion` să fie creat.
-- Extracția este append-only: nu șterge și nu înlocuiește criteriile existente,
-  iar propunerile și review-urile rămân auditabile.
-- Un `Project` primește `Report` periodice până la `monitoringEndDate`, data contractuală explicită.
-- Fiecare `Criterion` este verificat separat pentru fiecare `Report`.
-- O `CriterionValidation` aparține unui singur raport; validarea Raportului 2 nu o suprascrie pe cea a Raportului 1.
-- Fiecare constatare AI include cel puțin un `SourceAnchor` cu document, pagină și pasaj.
-- Orice rezultat AI devine final numai printr-o `UserDecision` explicită.
-- Procesarea asincronă este reprezentată de `AnalysisJob`.
+Este necesar Python 3.11 sau mai nou.
 
-## Arhitectură și responsabilități
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -e ".[test]"
+Copy-Item .env.example .env
+```
 
-- Mihnea deține API-ul și contractele.
-- Andrei deține UI/UX în NiceGUI.
-- Emi deține AI-ul și integrarea Qwen.
-- Dragoș deține SQLite și eventuala migrare la PostgreSQL.
+În `.env`, înlocuiește valoarea sintetică `CHIATRATON_JWT_SECRET` cu un secret local
+aleatoriu. Fișierul `.env` este ignorat de Git.
 
-UI-ul comunică numai prin API. API-ul accesează baza de date numai prin repository interfaces și accesează Qwen numai prin interfața `AIClient`. Numele modelului AI și adresa serviciului sunt configurabile; secretele nu intră în repository. ChIAtraton nu înlocuiește MyADR/MySMIS și nu execută task-uri, autorizări sau clarificări oficiale.
+## Pornire în development/demo
+
+```powershell
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Documentația interactivă este la `http://127.0.0.1:8000/docs`, iar health check-ul public
+la `http://127.0.0.1:8000/health`. Toate operațiile `/api/v1` cer Bearer JWT și toate
+operațiile `POST` cer `Idempotency-Key`.
+
+Generează un token cu durată scurtă numai pentru development/test:
+
+```powershell
+$token = python -m app.core.dev_token --subject synthetic-demo-user --minutes 60
+```
+
+Generatorul folosește configurația din `.env`, nu afișează secretul și refuză rularea
+când `CHIATRATON_ENVIRONMENT=production`. Nu există endpoint de autentificare deoarece
+acesta nu face parte din contractul API v1.
+
+Exemplu minimal:
+
+```powershell
+$headers = @{
+  Authorization = "Bearer $token"
+  "Idempotency-Key" = "synthetic-project-0001"
+}
+$body = @{
+  name = "Synthetic monitoring project"
+  completionDate = "2030-12-31"
+  monitoringEndDate = "2033-12-31"
+} | ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/projects `
+  -Method Post -Headers $headers -ContentType application/json -Body $body
+```
+
+## Configurare
+
+Variabilele au prefixul `CHIATRATON_`:
+
+| Variabilă | Development/demo | Production |
+|---|---|---|
+| `ENVIRONMENT` | `development` sau `test` | `production` |
+| `JWT_SECRET` | secret local | secret injectat la runtime |
+| `IDEMPOTENCY_BACKEND` | `memory` | `external` |
+| `REPOSITORY_BACKEND` | `memory` | `external` |
+| `DOCUMENT_STORAGE_BACKEND` | `memory` | `external` |
+| `CRITERION_EXTRACTOR_BACKEND` | `fake` | `external` |
+| `REPORT_ANALYZER_BACKEND` | `fake` | `external` |
+| `JOB_RUNNER_BACKEND` | `local` | `external` |
+
+Pornirea în production este refuzată dacă a rămas selectat oricare adaptor in-memory,
+fake sau local. Compoziția production trebuie să injecteze explicit `ApplicationService`
+și `IdempotencyStore` cu adaptoarele infrastructurii reale.
+
+## Matrice endpoint-uri
+
+| Metodă | Rută | Implementare curentă |
+|---|---|---|
+| GET | `/health` | funcțional, public |
+| POST | `/api/v1/projects` | funcțional, in-memory |
+| GET | `/api/v1/projects` | funcțional, cursor opac |
+| POST | `/api/v1/projects/{projectId}/documents` | funcțional, conținut in-memory separat |
+| POST | `/api/v1/projects/{projectId}/criteria` | funcțional, cod unic și ancore validate |
+| GET | `/api/v1/projects/{projectId}/criteria` | funcțional, cursor opac |
+| POST | `/api/v1/projects/{projectId}/criterion-extraction-jobs` | funcțional, `202` + job local |
+| GET | `/api/v1/analysis-jobs/{jobId}` | funcțional pentru ambele tipuri de job |
+| GET | `/api/v1/criterion-extraction-jobs/{jobId}/proposals` | funcțional, auditabil |
+| POST | `/api/v1/criterion-extraction-jobs/{jobId}/proposal-reviews` | funcțional, batch atomic |
+| POST | `/api/v1/projects/{projectId}/reports` | funcțional, document primar unic |
+| GET | `/api/v1/projects/{projectId}/reports` | funcțional, cursor opac |
+| POST | `/api/v1/reports/{reportId}/analysis-jobs` | funcțional, `202` + snapshot criterii |
+| GET | `/api/v1/reports/{reportId}/validations` | funcțional, istoric opțional |
+| POST | `/api/v1/validations/{validationId}/decisions` | funcțional, control optimist al reviziei |
+
+Rutele FastAPI depind numai de interfața `ApplicationService`. Serviciul concret depinde
+de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnalyzer` și
+`JobRunner`; nu importă SQLite, Qwen, OpenRouter sau NiceGUI.
+
+## Reguli importante
+
+- AI-ul creează `CriterionProposal`, nu `Criterion`; numai review-ul utilizatorului poate
+  crea criterii.
+- Review-ul batch este atomic. `accept` și `correct` creează criterii, `reject` nu creează.
+- Fiecare propunere și fiecare constatare factuală are `SourceAnchor` cu document, pagină
+  și pasaj.
+- O reanalizare adaugă o nouă revizie de `CriterionValidation`; istoricul și deciziile
+  vechi rămân disponibile.
+- `Report.status` este independent de `externalStatus`.
+- Repetarea unui `POST` cu aceeași cheie și același payload returnează răspunsul inițial;
+  aceeași cheie cu alt payload produce `409 idempotency_conflict`.
+- Conținutul documentelor nu este inclus în loguri sau erori.
+
+## Teste și verificări
+
+```powershell
+python -m pytest
+python -m ruff check app tests
+python -m compileall -q app tests
+```
+
+Testele validează și contractul OpenAPI 3.1, exemplele JSON, JWT, ProblemDetails,
+idempotency și întregul workflow Project → Document → CriterionProposal → Criterion →
+Report → AnalysisJob → CriterionValidation → UserDecision.
+
+## Limitări și următoarele adaptoare
+
+Starea, cursoarele, fișierele și joburile locale se pierd la restart și nu sunt potrivite
+pentru mai multe procese. AI-ul fake nu procesează semantic PDF/DOC/XLS; produce exclusiv
+rezultate sintetice, structurale și deterministe pentru teste/demo.
+
+- Dragoș poate înlocui `InMemoryUnitOfWorkFactory` și `InMemoryDocumentStorage` cu
+  adaptoarele SQLite, apoi PostgreSQL, fără a schimba rutele.
+- Emi poate înlocui `DeterministicFakeCriterionExtractor` și
+  `DeterministicFakeReportAnalyzer` cu adaptorul Qwen conform
+  `contracts/ai-contract.md`.
+- Un runner durabil și un `IdempotencyStore` extern trebuie injectate înainte de
+  production.
+- Validarea faptului că pasajul AI există textual în document va fi realizată de fluxul
+  real de extracție a conținutului; adaptorul fake validează doar forma și apartenența
+  ancorei.
 
 ## Documentație
 
+- [Contractul HTTP API v1](contracts/http-api.md)
+- [OpenAPI 3.1](contracts/openapi.yaml)
+- [Contractul AI](contracts/ai-contract.md)
 - [Specificația produsului](docs/product-spec.md)
 - [Workflow](docs/workflow.md)
 - [Modelul de date](docs/data-model.md)
 - [Arhitectura](docs/architecture.md)
-- [Indexul surselor și contradicțiilor](docs/source-index.md)
-- [Contractul HTTP API v1](contracts/http-api.md)
-- [OpenAPI 3.1](contracts/openapi.yaml)
-- [Contractul AI](contracts/ai-contract.md)
-- [Decizia pentru API v1](docs/decisions/ADR-api-v1.md)
-- [Decizii de arhitectură](docs/decisions/)
 
-## Starea implementării
-
-`DAO/` și `DataBase/` reprezintă implementarea existentă. Ele nu sunt actualizate de acest set de documentație. Denumirile legacy precum `obligations` și `references` vor necesita ulterior o migrare controlată către terminologia `Criterion` și `SourceAnchor`, cu acordul responsabilului bazei de date.
-
-## Confidențialitate
-
-Documentele beneficiarului sunt surse locale de analiză și sunt excluse prin `.gitignore`. Nu se publică nume, adrese, identificatori, valori financiare, pasaje comerciale sau alte date sensibile. În produs, accesul la documente și la pasajele-sursă trebuie limitat la proiectul curent și auditat.
+Nu se publică fotografii realizate la ADR, date reale despre beneficiari, URL-uri interne
+sau alte informații sensibile.
