@@ -132,6 +132,8 @@ API-ul să creeze `CriterionProposal` sau `CriterionValidation`. Detalii în
 | POST | `/api/v1/projects` | funcțional, in-memory |
 | GET | `/api/v1/projects` | funcțional, cursor opac |
 | POST | `/api/v1/projects/{projectId}/documents` | funcțional, conținut in-memory separat |
+| GET | `/api/v1/projects/{projectId}/documents` | funcțional, cursor opac |
+| GET | `/api/v1/documents/{documentId}/content` | funcțional, `Content-Disposition: attachment` |
 | POST | `/api/v1/projects/{projectId}/criteria` | funcțional, cod unic și ancore validate |
 | GET | `/api/v1/projects/{projectId}/criteria` | funcțional, cursor opac |
 | POST | `/api/v1/projects/{projectId}/criterion-extraction-jobs` | funcțional, `202` + job local |

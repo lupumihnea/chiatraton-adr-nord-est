@@ -35,6 +35,7 @@ from app.models.domain import (
     DocumentMediaType,
     PaginatedCriteria,
     PaginatedCriterionProposals,
+    PaginatedDocuments,
     PaginatedProjects,
     PaginatedReports,
     PaginatedValidations,
@@ -271,6 +272,31 @@ class DefaultApplicationService:
                 await self._storage.delete(content_handle)
             raise
         return document
+
+    async def list_project_documents(
+        self, project_id: UUID, limit: int, cursor: str | None, user: CurrentUser
+    ) -> PaginatedDocuments:
+        async with self._uow_factory() as uow:
+            await self._owned_project(uow, project_id, user)
+            items = await uow.documents.list_for_project(project_id)
+        items.sort(key=lambda item: (item.created_at, str(item.id)))
+        scope = f"documents:{user.subject}:{project_id}"
+        page, next_cursor = self._page(items, limit, cursor, scope)
+        return PaginatedDocuments(items=page, next_cursor=next_cursor)
+
+    async def get_document_content(
+        self, document_id: UUID, user: CurrentUser
+    ) -> tuple[Document, bytes]:
+        async with self._uow_factory() as uow:
+            document = await uow.documents.get(document_id)
+            if document is None:
+                raise _not_found("document")
+            await self._owned_project(uow, document.project_id, user)
+        handle = await self._storage.handle_for(document_id)
+        content = await self._storage.get(handle) if handle is not None else None
+        if content is None:
+            raise _not_found("document")
+        return document, content
 
     async def create_project_criterion(
         self,

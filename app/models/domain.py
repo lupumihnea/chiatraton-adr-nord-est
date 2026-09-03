@@ -140,6 +140,11 @@ class Document(APIModel):
     created_at: datetime
 
 
+class PaginatedDocuments(APIModel):
+    items: list[Document]
+    next_cursor: Cursor | None
+
+
 class DocumentUpload(APIModel):
     file: bytes = Field(json_schema_extra={"format": "binary"})
     display_name: str = Field(  # type: ignore[assignment]

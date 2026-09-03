@@ -22,10 +22,18 @@ TEST_JWT_SECRET = "synthetic-test-secret-with-sufficient-entropy"
 
 @pytest.fixture
 def settings() -> Settings:
+    # Explicit kwargs win over both a developer's local .env and any
+    # environment variables already mutated by importing Interface.api_client
+    # (which calls load_dotenv() at import time). Tests must stay hermetic
+    # even when CHIATRATON_CRITERION_EXTRACTOR_BACKEND=qwen is set locally
+    # for manual testing, or the suite would try to call OpenRouter for real.
     return Settings(
+        _env_file=None,
         environment="test",
         jwt_secret=SecretStr(TEST_JWT_SECRET),
         docs_enabled=True,
+        criterion_extractor_backend="fake",
+        report_analyzer_backend="fake",
     )
 
 

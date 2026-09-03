@@ -156,6 +156,59 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Documents]
+      operationId: listProjectDocuments
+      summary: Listează documentele proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagină de documente.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocuments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/documents/{documentId}/content:
+    get:
+      tags: [Documents]
+      operationId: getDocumentContent
+      summary: Descarcă conținutul binar al unui document.
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Conținutul documentului.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/projects/{projectId}/criteria:
     post:
@@ -569,6 +622,13 @@ components:
         format: uuid
     ReportId:
       name: reportId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    DocumentId:
+      name: documentId
       in: path
       required: true
       schema:
@@ -1684,6 +1744,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    PaginatedDocuments:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
         nextCursor:
           type: [string, 'null']
           minLength: 1

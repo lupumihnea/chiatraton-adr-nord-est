@@ -337,3 +337,43 @@ def test_invalid_fake_analysis_response_fails_job_and_report(settings, auth_head
             f"/api/v1/projects/{project['id']}/reports", headers=auth_headers
         ).json()["items"]
         assert reports[0]["status"] == "analysis_failed"
+
+
+def test_list_project_documents_and_download_content(client, auth_headers):
+    project = _create_project(client, auth_headers)
+    first_content = b"Synthetic document one. No beneficiary data."
+    second_content = b"Synthetic document two. No beneficiary data."
+    first = _upload(
+        client, auth_headers, project["id"], "doc-list-1", "one.pdf", first_content
+    )
+    second = _upload(
+        client, auth_headers, project["id"], "doc-list-2", "two.pdf", second_content
+    )
+
+    listed = client.get(
+        f"/api/v1/projects/{project['id']}/documents", headers=auth_headers
+    )
+    assert listed.status_code == 200
+    items = listed.json()["items"]
+    assert {item["id"] for item in items} == {first["id"], second["id"]}
+    assert {item["originalFilename"] for item in items} == {"one.pdf", "two.pdf"}
+
+    other_project = _create_project(client, auth_headers, key="doc-list-other-project")
+    other_listed = client.get(
+        f"/api/v1/projects/{other_project['id']}/documents", headers=auth_headers
+    )
+    assert other_listed.json()["items"] == []
+
+    content_response = client.get(
+        f"/api/v1/documents/{first['id']}/content", headers=auth_headers
+    )
+    assert content_response.status_code == 200
+    assert content_response.content == first_content
+    assert content_response.headers["content-type"] == "application/pdf"
+    assert "one.pdf" in content_response.headers["content-disposition"]
+
+    missing = client.get(
+        "/api/v1/documents/00000000-0000-4000-8000-000000000000/content",
+        headers=auth_headers,
+    )
+    assert missing.status_code == 404

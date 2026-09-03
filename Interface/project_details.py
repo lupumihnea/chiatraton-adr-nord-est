@@ -31,6 +31,17 @@ async def project_details_page(project_id: str) -> None:
 
         content = ui.column().classes("w-full items-center gap-6")
 
+        async def open_document(document_id: str, fallback_name: str) -> None:
+            # A plain <a href> to the API would ship without the bearer
+            # token, so the content is fetched here (authenticated) and
+            # handed to the browser as a download instead.
+            try:
+                content_bytes, filename = await api_client.get_document_content(document_id)
+            except Exception as error:
+                ui.notify(api_error_message(error), type="negative", timeout=8000)
+                return
+            ui.download(content_bytes, filename=filename or fallback_name)
+
         async def load_after_connect() -> None:
             try:
                 project = await api_client.get_project(project_id)
@@ -61,12 +72,19 @@ async def project_details_page(project_id: str) -> None:
 
             recent = getattr(app, "recent_projects", [])
             recent = [p for p in recent if p["id"] != project_id]
-            recent.insert(0, {"id": project["id"], "smisCode": project.get("smisCode", ""), "name": project["name"]})
+            recent.insert(
+                0,
+                {
+                    "id": project["id"],
+                    "smisCode": project.get("smisCode", ""),
+                    "name": project["name"],
+                },
+            )
             app.recent_projects = recent[:5]
 
             loading_label.text = "Se încarcă documentele și obligațiile..."
             try:
-                documents = await api_client.list_project_documents(project_id)
+                documents = await api_client.list_all_project_documents(project_id)
             except Exception as error:
                 documents = []
                 documents_error = api_error_message(error)
@@ -160,18 +178,39 @@ async def project_details_page(project_id: str) -> None:
                     if documents_error:
                         ui.label(documents_error).classes("text-red-700")
                     elif not documents:
-                        ui.label("Niciun document încărcat în proiect momentan.").classes("text-gray-600")
+                        ui.label(
+                            "Niciun document încărcat în proiect momentan."
+                        ).classes("text-gray-600")
                     else:
                         with ui.row().classes("w-full gap-4"):
                             for doc in documents:
-                                with ui.card().classes("w-72 shadow-sm rounded-xl border border-gray-200 bg-gray-50 flex-col gap-1"):
+                                original_filename = (
+                                    doc.get("originalFilename") or "document.pdf"
+                                )
+                                doc_id = doc.get("id")
+                                with ui.card().classes(
+                                    "w-72 shadow-sm rounded-xl border border-gray-200 "
+                                    "bg-gray-50 flex-col gap-1"
+                                ):
                                     with ui.row().classes("items-center gap-2 w-full"):
-                                        ui.icon("description", size="sm").classes("text-gray-500")
-                                        ui.label(doc.get("displayName") or doc.get("filename")).classes("font-bold text-gray-800 break-all")
+                                        ui.icon("description", size="sm").classes(
+                                            "text-gray-500"
+                                        )
+                                        ui.label(
+                                            doc.get("displayName") or original_filename
+                                        ).classes("font-bold text-gray-800 break-all")
                                     if doc.get("displayName"):
-                                        ui.label(doc.get("filename")).classes("text-xs text-gray-500 break-all")
-                                    # Optional link down the road:
-                                    ui.link("Deschide", f"{api_client.base_url}/api/v1/documents/{doc.get('id')}/content", new_tab=True).classes("text-blue-600 underline text-sm mt-1")
+                                        ui.label(original_filename).classes(
+                                            "text-xs text-gray-500 break-all"
+                                        )
+                                    ui.button(
+                                        "Deschide",
+                                        on_click=lambda did=doc_id, name=original_filename: (
+                                            open_document(did, name)
+                                        ),
+                                    ).props("flat no-caps dense color=primary").classes(
+                                        "text-sm mt-1 self-start px-0"
+                                    )
 
                 with ui.column().classes(
                     "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
@@ -220,11 +259,14 @@ async def project_details_page(project_id: str) -> None:
                                     ).classes("w-full"):
                                         doc_id = anchor.get("documentId")
                                         if doc_id:
-                                            ui.link(
+                                            ui.button(
                                                 "Deschide documentul",
-                                                f"{api_client.base_url}/api/v1/documents/{doc_id}/content",
-                                                new_tab=True
-                                            ).classes("text-blue-600 underline text-sm mb-2 block")
+                                                on_click=lambda did=doc_id: open_document(
+                                                    did, "document.pdf"
+                                                ),
+                                            ).props(
+                                                "flat no-caps dense color=primary"
+                                            ).classes("text-sm mb-2 self-start px-0")
                                         ui.label(
                                             " ".join(
                                                 str(anchor.get("passage", "")).split()

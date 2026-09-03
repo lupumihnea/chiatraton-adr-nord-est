@@ -53,6 +53,9 @@ def install_openapi_factory(app: FastAPI) -> None:
             "multipart/form-data"
         ]["schema"] = {"$ref": "#/components/schemas/DocumentUpload"}
         schema["paths"]["/api/v1/analysis-jobs/{jobId}"]["get"]["responses"].pop("422", None)
+        schema["paths"]["/api/v1/documents/{documentId}/content"]["get"]["responses"]["200"][
+            "content"
+        ].pop("application/json", None)
         _remove_null_defaults(schema)
         app.openapi_schema = schema
         return schema
