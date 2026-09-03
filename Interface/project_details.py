@@ -97,3 +97,57 @@ async def project_details_page(project_id: str) -> None:
                     "px-4 py-2 text-sm font-extrabold shadow-lg hover:scale-105 "
                     "transition-transform duration-200 text-gray-900 w-full"
                 )
+
+        with ui.column().classes(
+            "w-full max-w-6xl mt-6 bg-white shadow-xl rounded-[1.5rem] p-6 "
+            "border border-yellow-100"
+        ):
+            with ui.row().classes("w-full items-center justify-between gap-3"):
+                with ui.row().classes("items-center gap-2"):
+                    ui.icon("fact_check", size="sm").classes("text-yellow-600")
+                    ui.label("Obligații / criterii active").classes(
+                        "text-2xl font-extrabold text-gray-800"
+                    )
+                ui.button(
+                    "Încarcă documente și extrage din nou",
+                    icon="document_scanner",
+                    on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
+                ).props("outline rounded no-caps")
+
+            ui.separator().classes("my-3 opacity-50")
+            try:
+                criteria = await api_client.list_all_project_criteria(project_id)
+            except Exception as error:
+                ui.label(api_error_message(error)).classes("text-red-700")
+                criteria = []
+
+            if not criteria:
+                ui.label(
+                    "Nu există încă obligații confirmate. După upload, extragerea AI pornește "
+                    "automat și vei fi dus la pagina unde confirmi/corectezi/respingi propunerile."
+                ).classes("text-gray-600")
+            else:
+                ui.label(f"{len(criteria)} obligații confirmate").classes(
+                    "font-bold text-green-700 mb-2"
+                )
+                for criterion in criteria:
+                    with ui.card().classes(
+                        "w-full shadow-sm rounded-xl border border-green-100"
+                    ):
+                        ui.label(str(criterion.get("code", ""))).classes(
+                            "font-extrabold text-green-800"
+                        )
+                        ui.label(
+                            " ".join(str(criterion.get("description", "")).split())
+                        ).classes("text-gray-800")
+                        deadline = criterion.get("deadline") or "Fără termen explicit"
+                        ui.label(f"Termen: {deadline}").classes("text-sm text-gray-600")
+                        for anchor in criterion.get("sourceAnchors") or []:
+                            with ui.expansion(
+                                f"Sursă · pagina {anchor.get('pageNumber', '?')}",
+                                icon="article",
+                            ).classes("w-full"):
+                                ui.label(
+                                    " ".join(str(anchor.get("passage", "")).split())
+                                ).classes("whitespace-normal")
+

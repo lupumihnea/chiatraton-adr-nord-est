@@ -1,0 +1,349 @@
+"""Human review page for AI-extracted project obligations/criteria."""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import date
+from typing import Any
+
+from nicegui import ui
+
+from Interface.api_client import (
+    IdempotencyKeyManager,
+    api_client,
+    api_error_message,
+    json_fingerprint,
+)
+
+TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
+
+
+def _clean(text: object) -> str:
+    return " ".join(str(text or "").split())
+
+
+def _deadline_text(value: object) -> str:
+    return str(value) if value else "Fără termen explicit"
+
+
+@ui.page("/project/{project_id}/criteria-review/{job_id}")
+async def criteria_review_page(project_id: str, job_id: str) -> None:
+    """Show extraction proposals, their exact sources, and review actions."""
+
+    ui.colors(primary="#ffcc00", accent="#ffcc00")
+    key_manager = IdempotencyKeyManager()
+
+    with ui.column().classes("w-full items-center min-h-[85vh] bg-gray-50/30 p-4"):
+        with ui.row().classes("w-full max-w-6xl items-center justify-between mb-2"):
+            ui.button(
+                "Înapoi la proiect",
+                icon="arrow_back",
+                on_click=lambda: ui.navigate.to(f"/project/{project_id}"),
+            ).props("flat rounded no-caps").classes("font-bold")
+            ui.label("Extragere obligații / criterii").classes(
+                "text-2xl font-extrabold text-gray-800"
+            )
+
+        with ui.card().classes(
+            "w-full max-w-6xl rounded-[1.5rem] shadow-xl border border-yellow-100"
+        ):
+            ui.label(
+                "AI-ul propune obligațiile, dar acestea devin criterii active numai după "
+                "confirmarea utilizatorului. Pasajele afișate sunt recuperate din sursa locală."
+            ).classes("text-gray-700")
+
+            status_row = ui.row().classes("items-center gap-3")
+            with status_row:
+                spinner = ui.spinner(size="md")
+                status_label = ui.label("Se verifică starea extracției...").classes("font-bold")
+
+        proposals_container = ui.column().classes("w-full max-w-6xl gap-4")
+        criteria_container = ui.column().classes("w-full max-w-6xl gap-3")
+
+        async def load_proposals() -> list[dict[str, Any]]:
+            return await api_client.list_all_criterion_extraction_proposals(job_id)
+
+        async def load_criteria() -> list[dict[str, Any]]:
+            return await api_client.list_all_project_criteria(project_id)
+
+        @ui.refreshable
+        async def criteria_view() -> None:
+            criteria_container.clear()
+            with criteria_container:
+                try:
+                    criteria = await load_criteria()
+                except Exception as error:
+                    ui.label(api_error_message(error)).classes("text-red-700")
+                    return
+                ui.label(f"Criterii active confirmate: {len(criteria)}").classes(
+                    "text-xl font-extrabold text-gray-800"
+                )
+                if not criteria:
+                    ui.label(
+                        "Încă nu există criterii active. Confirmă cel puțin o propunere de mai jos."
+                    ).classes("text-gray-500")
+                    return
+                for criterion in criteria:
+                    with ui.card().classes("w-full shadow-sm border border-green-100"):
+                        ui.label(str(criterion.get("code", ""))).classes(
+                            "font-extrabold text-green-800"
+                        )
+                        ui.label(_clean(criterion.get("description"))).classes("text-gray-800")
+                        ui.label(
+                            f"Termen: {_deadline_text(criterion.get('deadline'))}"
+                        ).classes("text-sm text-gray-600")
+
+        async def review_one(
+            proposal: dict[str, Any],
+            *,
+            action: str,
+            correction: dict[str, Any] | None = None,
+            comment: str | None = None,
+        ) -> None:
+            review: dict[str, Any] = {
+                "proposalId": proposal["id"],
+                "proposalRevision": proposal["revision"],
+                "action": action,
+            }
+            if correction is not None:
+                review["correction"] = correction
+            if comment:
+                review["comment"] = comment
+            payload = {"reviews": [review]}
+            fingerprint = json_fingerprint(payload)
+            operation = f"criterion-review:{job_id}:{proposal['id']}"
+            key = key_manager.key_for(operation, fingerprint)
+            try:
+                await api_client.review_criterion_proposals(
+                    job_id,
+                    reviews=payload["reviews"],
+                    idempotency_key=key,
+                )
+            except Exception as error:
+                ui.notify(api_error_message(error), type="negative", timeout=10000)
+                return
+            key_manager.mark_succeeded(operation, fingerprint)
+            ui.notify("Decizia a fost salvată.", type="positive")
+            await proposals_view.refresh()
+            await criteria_view.refresh()
+
+        def correction_dialog(proposal: dict[str, Any]) -> None:
+            with ui.dialog() as dialog, ui.card().classes("w-full max-w-3xl"):
+                ui.label("Corectează obligația propusă").classes("text-xl font-extrabold")
+                code = ui.input("Cod", value=proposal.get("proposedCode") or "").classes("w-full")
+                description = ui.textarea(
+                    "Descriere",
+                    value=proposal.get("proposedDescription") or "",
+                ).props("autogrow").classes("w-full")
+                deadline = ui.input(
+                    "Termen (YYYY-MM-DD, opțional)",
+                    value=proposal.get("proposedDeadline") or "",
+                ).classes("w-full")
+                comment = ui.textarea("Motivul corecției").props("autogrow").classes("w-full")
+
+                async def save() -> None:
+                    if not str(code.value or "").strip() or not str(description.value or "").strip():
+                        ui.notify("Codul și descrierea sunt obligatorii.", type="warning")
+                        return
+                    if not str(comment.value or "").strip():
+                        ui.notify("Adaugă motivul corecției.", type="warning")
+                        return
+                    raw_deadline = str(deadline.value or "").strip()
+                    if raw_deadline:
+                        try:
+                            date.fromisoformat(raw_deadline)
+                        except ValueError:
+                            ui.notify("Termenul trebuie să fie YYYY-MM-DD.", type="warning")
+                            return
+                    correction = {
+                        "code": str(code.value).strip(),
+                        "description": str(description.value).strip(),
+                        "deadline": raw_deadline or None,
+                        "sourceAnchors": proposal.get("sourceAnchors") or [],
+                    }
+                    dialog.close()
+                    await review_one(
+                        proposal,
+                        action="correct",
+                        correction=correction,
+                        comment=str(comment.value).strip(),
+                    )
+
+                with ui.row().classes("w-full justify-end gap-2"):
+                    ui.button("Anulează", on_click=dialog.close).props("flat no-caps")
+                    ui.button("Salvează corecția", on_click=save).props("no-caps")
+            dialog.open()
+
+        def reject_dialog(proposal: dict[str, Any]) -> None:
+            with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl"):
+                ui.label("Respinge propunerea").classes("text-xl font-extrabold")
+                comment = ui.textarea("Motivul respingerii").props("autogrow").classes("w-full")
+
+                async def reject() -> None:
+                    value = str(comment.value or "").strip()
+                    if not value:
+                        ui.notify("Motivul respingerii este obligatoriu.", type="warning")
+                        return
+                    dialog.close()
+                    await review_one(proposal, action="reject", comment=value)
+
+                with ui.row().classes("w-full justify-end gap-2"):
+                    ui.button("Anulează", on_click=dialog.close).props("flat no-caps")
+                    ui.button("Respinge", on_click=reject).props("color=negative no-caps")
+            dialog.open()
+
+        @ui.refreshable
+        async def proposals_view() -> None:
+            proposals_container.clear()
+            with proposals_container:
+                try:
+                    proposals = await load_proposals()
+                except Exception as error:
+                    ui.label(api_error_message(error)).classes("text-red-700")
+                    return
+
+                unreviewed = [item for item in proposals if item.get("review") is None]
+                ui.label(
+                    f"Propuneri AI: {len(proposals)} · de verificat: {len(unreviewed)}"
+                ).classes("text-xl font-extrabold text-gray-800")
+
+                if not proposals:
+                    ui.label(
+                        "Extragerea s-a terminat, dar AI-ul nu a găsit obligații susținute de "
+                        "pasaje exacte în documentele selectate."
+                    ).classes("text-orange-700")
+                    return
+
+                async def accept_all() -> None:
+                    current = [item for item in proposals if item.get("review") is None]
+                    if not current:
+                        return
+                    reviews = [
+                        {
+                            "proposalId": item["id"],
+                            "proposalRevision": item["revision"],
+                            "action": "accept",
+                        }
+                        for item in current
+                    ]
+                    payload = {"reviews": reviews}
+                    fingerprint = json_fingerprint(payload)
+                    operation = f"criterion-review-all:{job_id}"
+                    key = key_manager.key_for(operation, fingerprint)
+                    try:
+                        await api_client.review_criterion_proposals(
+                            job_id,
+                            reviews=reviews,
+                            idempotency_key=key,
+                        )
+                    except Exception as error:
+                        ui.notify(api_error_message(error), type="negative", timeout=10000)
+                        return
+                    key_manager.mark_succeeded(operation, fingerprint)
+                    ui.notify(f"Au fost confirmate {len(current)} obligații.", type="positive")
+                    await proposals_view.refresh()
+                    await criteria_view.refresh()
+
+                if unreviewed:
+                    ui.button(
+                        f"Confirmă toate ({len(unreviewed)})",
+                        icon="done_all",
+                        on_click=accept_all,
+                    ).props("no-caps").classes("self-start")
+
+                for proposal in proposals:
+                    review = proposal.get("review")
+                    with ui.card().classes(
+                        "w-full shadow-md rounded-xl border border-yellow-100"
+                    ):
+                        with ui.row().classes("w-full items-start justify-between gap-3"):
+                            with ui.column().classes("gap-1 flex-grow"):
+                                ui.label(str(proposal.get("proposedCode", ""))).classes(
+                                    "font-extrabold text-lg text-gray-800"
+                                )
+                                ui.label(_clean(proposal.get("proposedDescription"))).classes(
+                                    "text-gray-800"
+                                )
+                                ui.label(
+                                    f"Termen: {_deadline_text(proposal.get('proposedDeadline'))}"
+                                ).classes("text-sm text-gray-600")
+                            if review:
+                                ui.badge(f"Revizuit: {review.get('action')}").props("outline")
+
+                        anchors = proposal.get("sourceAnchors") or []
+                        if anchors:
+                            ui.separator()
+                            ui.label("Dovezi exacte din document").classes("font-bold")
+                            for index, anchor in enumerate(anchors, start=1):
+                                with ui.expansion(
+                                    f"Pasaj {index} · pagina {anchor.get('pageNumber', '?')}",
+                                    icon="article",
+                                ).classes("w-full"):
+                                    ui.label(_clean(anchor.get("passage"))).classes(
+                                        "whitespace-normal text-gray-800"
+                                    )
+                                    ui.label(
+                                        f"Document: {anchor.get('documentId', '')}"
+                                    ).classes("text-xs text-gray-500")
+                        else:
+                            ui.label("Fără pasaj sursă — nu poate fi confirmată.").classes(
+                                "text-red-700"
+                            )
+
+                        if review is None:
+                            with ui.row().classes("gap-2 mt-2"):
+                                ui.button(
+                                    "Confirmă",
+                                    icon="check",
+                                    on_click=lambda p=proposal: review_one(p, action="accept"),
+                                ).props("no-caps")
+                                ui.button(
+                                    "Corectează",
+                                    icon="edit",
+                                    on_click=lambda p=proposal: correction_dialog(p),
+                                ).props("outline no-caps")
+                                ui.button(
+                                    "Respinge",
+                                    icon="close",
+                                    on_click=lambda p=proposal: reject_dialog(p),
+                                ).props("flat color=negative no-caps")
+
+        # Poll the background extraction job.  The job is intentionally separate
+        # from upload because the API contract models extraction as an auditable job.
+        job: dict[str, Any] | None = None
+        try:
+            for _ in range(180):  # up to ~6 minutes for local parsing + paid OpenRouter calls
+                job = await api_client.get_analysis_job(job_id)
+                status = str(job.get("status", ""))
+                if status in TERMINAL_JOB_STATUSES:
+                    break
+                status_label.text = f"Extragere în curs: {status}..."
+                await asyncio.sleep(2)
+        except Exception as error:
+            spinner.set_visibility(False)
+            status_label.text = "Nu am putut citi starea extracției."
+            ui.notify(api_error_message(error), type="negative", timeout=10000)
+            return
+
+        if job is None or str(job.get("status")) not in TERMINAL_JOB_STATUSES:
+            spinner.set_visibility(False)
+            status_label.text = "Extragerea durează mai mult decât intervalul de așteptare."
+            ui.button("Reîncarcă pagina", on_click=lambda: ui.navigate.to(
+                f"/project/{project_id}/criteria-review/{job_id}"
+            )).props("no-caps")
+            return
+
+        spinner.set_visibility(False)
+        status = str(job.get("status"))
+        if status != "succeeded":
+            error = job.get("error") or {}
+            status_label.text = f"Extragerea a eșuat: {_clean(error.get('message') or status)}"
+            status_label.classes(replace="font-bold text-red-700")
+            return
+
+        status_label.text = (
+            f"Extragere finalizată · {job.get('proposalCount', 0)} propuneri găsite"
+        )
+        status_label.classes(replace="font-bold text-green-700")
+        await criteria_view()
+        await proposals_view()

@@ -13,6 +13,7 @@ from Interface.api_client import (
     api_client,
     api_error_message,
     upload_fingerprint,
+    json_fingerprint,
 )
 
 MAX_PDF_BYTES = 26_214_400
@@ -220,6 +221,7 @@ def upload_documents_page(project_id: str) -> None:
                     loading.set_visibility(True)
                     error_label.set_visibility(False)
                     uploaded = 0
+                    uploaded_document_ids: list[str] = []
                     try:
                         for row_data in pending:
                             filename = str(row_data["filename"])
@@ -237,7 +239,7 @@ def upload_documents_page(project_id: str) -> None:
                                 fingerprint,
                             )
                             try:
-                                await api_client.upload_document(
+                                uploaded_document = await api_client.upload_document(
                                     project_id,
                                     filename=filename,
                                     content=content,
@@ -267,6 +269,10 @@ def upload_documents_page(project_id: str) -> None:
                                 break
 
                             row_data["completed"] = True
+                            document_id = uploaded_document.get("id")
+                            if document_id:
+                                row_data["document_id"] = str(document_id)
+                                uploaded_document_ids.append(str(document_id))
                             key_manager.mark_succeeded(
                                 str(row_data["operation"]),
                                 fingerprint,
@@ -282,11 +288,57 @@ def upload_documents_page(project_id: str) -> None:
 
                     if uploaded == len(pending):
                         ui.notify(
-                            f"{uploaded} document(e) au fost încărcate cu succes!",
+                            f"{uploaded} document(e) au fost încărcate. Pornim extragerea obligațiilor...",
                             type="positive",
                             position="top",
                         )
-                        ui.navigate.to(f"/project/{project_id}")
+                        if not uploaded_document_ids:
+                            ui.notify(
+                                "Documentele au fost încărcate, dar API-ul nu a returnat ID-urile lor.",
+                                type="negative",
+                            )
+                            ui.navigate.to(f"/project/{project_id}")
+                            return
+
+                        extraction_payload = {
+                            "projectId": project_id,
+                            "documentIds": sorted(uploaded_document_ids),
+                        }
+                        extraction_fingerprint = json_fingerprint(extraction_payload)
+                        extraction_operation = f"extract-criteria:{project_id}"
+                        extraction_key = key_manager.key_for(
+                            extraction_operation, extraction_fingerprint
+                        )
+                        try:
+                            job = await api_client.create_criterion_extraction_job(
+                                project_id,
+                                document_ids=uploaded_document_ids,
+                                idempotency_key=extraction_key,
+                            )
+                        except Exception as error:
+                            ui.notify(
+                                "Documentele sunt încărcate, dar extragerea nu a putut porni: "
+                                + api_error_message(error),
+                                type="negative",
+                                timeout=10000,
+                            )
+                            ui.navigate.to(f"/project/{project_id}")
+                            return
+
+                        key_manager.mark_succeeded(
+                            extraction_operation, extraction_fingerprint
+                        )
+                        job_id = job.get("id")
+                        if not job_id:
+                            ui.notify(
+                                "Job-ul de extracție nu are ID.",
+                                type="negative",
+                            )
+                            ui.navigate.to(f"/project/{project_id}")
+                            return
+                        ui.navigate.to(
+                            f"/project/{project_id}/criteria-review/{job_id}"
+                        )
 
                 submit_button = ui.button(
                     "Trimite documentele",

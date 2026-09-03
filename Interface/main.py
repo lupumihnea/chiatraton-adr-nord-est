@@ -4,10 +4,10 @@ import os
 
 from nicegui import app, ui
 
-from Interface import add_project, project_details, upload_documents
+from Interface import add_project, criteria_review, project_details, upload_documents
 from Interface.api_client import api_client, api_error_message
 
-_REGISTERED_PAGE_MODULES = (add_project, project_details, upload_documents)
+_REGISTERED_PAGE_MODULES = (add_project, criteria_review, project_details, upload_documents)
 
 # Includem fontul și fundalul definite în interfața furnizată de Andrei.
 ui.add_head_html(

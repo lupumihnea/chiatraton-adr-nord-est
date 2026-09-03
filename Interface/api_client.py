@@ -250,4 +250,121 @@ class ChIAtratonAPIClient:
         return result
 
 
+    async def create_criterion_extraction_job(
+        self,
+        project_id: str,
+        *,
+        document_ids: list[str],
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/api/v1/projects/{project_id}/criterion-extraction-jobs",
+            json={"documentIds": document_ids},
+            headers={"Idempotency-Key": idempotency_key},
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat un job de extracție invalid.")
+        return result
+
+    async def get_analysis_job(self, job_id: str) -> dict[str, Any]:
+        response = await self._request("GET", f"/api/v1/analysis-jobs/{job_id}")
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat un job de analiză invalid.")
+        return result
+
+    async def list_criterion_extraction_proposals(
+        self,
+        job_id: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = await self._request(
+            "GET",
+            f"/api/v1/criterion-extraction-jobs/{job_id}/proposals",
+            params=params,
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat propuneri de criterii invalide.")
+        return result
+
+    async def list_all_criterion_extraction_proposals(
+        self, job_id: str
+    ) -> list[dict[str, Any]]:
+        proposals: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            page = await self.list_criterion_extraction_proposals(
+                job_id, limit=100, cursor=cursor
+            )
+            items = page.get("items", [])
+            if not isinstance(items, list):
+                raise APIClientError("API-ul a returnat propuneri într-un format invalid.")
+            proposals.extend(item for item in items if isinstance(item, dict))
+            next_cursor = page.get("nextCursor")
+            if not next_cursor:
+                return proposals
+            cursor = str(next_cursor)
+
+    async def review_criterion_proposals(
+        self,
+        job_id: str,
+        *,
+        reviews: list[dict[str, Any]],
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/api/v1/criterion-extraction-jobs/{job_id}/proposal-reviews",
+            json={"reviews": reviews},
+            headers={"Idempotency-Key": idempotency_key},
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat un rezultat de revizuire invalid.")
+        return result
+
+    async def list_project_criteria(
+        self,
+        project_id: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = await self._request(
+            "GET",
+            f"/api/v1/projects/{project_id}/criteria",
+            params=params,
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat criterii într-un format invalid.")
+        return result
+
+    async def list_all_project_criteria(self, project_id: str) -> list[dict[str, Any]]:
+        criteria: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            page = await self.list_project_criteria(project_id, limit=100, cursor=cursor)
+            items = page.get("items", [])
+            if not isinstance(items, list):
+                raise APIClientError("API-ul a returnat criterii într-un format invalid.")
+            criteria.extend(item for item in items if isinstance(item, dict))
+            next_cursor = page.get("nextCursor")
+            if not next_cursor:
+                return criteria
+            cursor = str(next_cursor)
+
+
+
 api_client = ChIAtratonAPIClient.from_environment()
