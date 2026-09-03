@@ -1,30 +1,30 @@
 from typing import List
 
-from DAO.projects_DAO import ProjectDAO
+from Objects.project import Project
 
 
 class ProjectRepository:
     @staticmethod
-    def get_project_by_id(cursor,project_id) ->ProjectDAO:
+    def get_project_by_id(cursor,project_id) ->Project:
         select_statement = "SELECT * FROM projects WHERE id = ?"
         cursor.execute(select_statement,(project_id,))
         row=cursor.fetchone()
-        return ProjectDAO.from_row(row)
+        return Project.from_row(row)
 
 
     @staticmethod
-    def get_all_projects(cursor) -> List[ProjectDAO]:
+    def get_all_projects(cursor) -> List[Project]:
         select_statement = "SELECT * FROM projects"
         cursor.execute(select_statement)
         rows = cursor.fetchall()
-        return [ProjectDAO.from_row(row) for row in rows]
+        return [Project.from_row(row) for row in rows]
 
 
     @staticmethod
-    def insert_project(cursor,project_id, call_id, name=None) -> ProjectDAO:
-        insert_statement = "INSERT INTO projects (id, call_id, name) VALUES (?, ?, ?)"
-        cursor.execute(insert_statement, (project_id, call_id, name))
-        return ProjectDAO(id=project_id, call_id=call_id,  name=name)
+    def insert_project(cursor,project_id, call_id, name=None, client=None) -> Project:
+        insert_statement = "INSERT INTO projects (id, call_id, name, client) VALUES (?, ?, ?, ?)"
+        cursor.execute(insert_statement, (project_id, call_id, name, client))
+        return Project(id=project_id, call_id=call_id,  name=name, client=client)
 
     # @staticmethod
     # def update_project(cursor, id, call_id, time_ending, name=None) -> ProjectDAO:
