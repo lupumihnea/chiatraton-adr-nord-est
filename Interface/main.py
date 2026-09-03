@@ -1,16 +1,31 @@
 """NiceGUI entry point based directly on Andrei's supplied interface."""
 
+# ruff: noqa: E402
+
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
 
-from nicegui import app, ui
+from nicegui import app, ui  # noqa: E402
 
-from Interface import add_project, criteria_review, project_details, upload_documents
-from Interface.api_client import api_client, api_error_message
+from Interface import (
+    add_project,
+    criteria_review,
+    project_details,
+    report_analysis,
+    upload_documents,
+)  # noqa: E402
+from Interface.api_client import api_client, api_error_message  # noqa: E402
 
-_REGISTERED_PAGE_MODULES = (add_project, criteria_review, project_details, upload_documents)
+_REGISTERED_PAGE_MODULES = (
+    add_project,
+    criteria_review,
+    project_details,
+    report_analysis,
+    upload_documents,
+)
 
 # Includem fontul și fundalul definite în interfața furnizată de Andrei.
 ui.add_head_html(
@@ -39,8 +54,13 @@ async def home() -> None:
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
     with ui.column().classes("w-full items-center mt-8 space-y-6 min-h-[85vh]"):
-        with ui.row().classes("absolute top-6 right-6 items-center gap-3 bg-white px-4 py-2 rounded-full shadow-sm"):
-            ui.label("Bine ai venit, expert în monitorizare!").classes("text-gray-700 font-bold text-sm")
+        with ui.row().classes(
+            "absolute top-6 right-6 items-center gap-3 bg-white px-4 py-2 "
+            "rounded-full shadow-sm"
+        ):
+            ui.label("Bine ai venit, expert în monitorizare!").classes(
+                "text-gray-700 font-bold text-sm"
+            )
             ui.icon("account_circle", size="2rem").classes("text-gray-400")
 
         ui.image("/Assets/Logo-ADR.png").classes(
@@ -135,7 +155,7 @@ async def home() -> None:
                 )
             else:
                 projects.extend(fetched)
-                
+
                 recent = getattr(app, "recent_projects", [])
                 if recent:
                     recent_container.set_visibility(True)
@@ -147,14 +167,20 @@ async def home() -> None:
                             )
                         with ui.column().classes("w-full gap-3"):
                             for r_proj in recent:
-                                btn_text = f"{r_proj.get('smisCode', '')} - {r_proj.get('name', 'Proiect')}"
+                                btn_text = (
+                                    f"{r_proj.get('smisCode', '')} - "
+                                    f"{r_proj.get('name', 'Proiect')}"
+                                )
                                 if len(btn_text) > 35:
                                     btn_text = btn_text[:32] + "..."
                                 ui.button(
                                     btn_text,
-                                    on_click=lambda pid=r_proj["id"]: ui.navigate.to(f"/project/{pid}")
+                                    on_click=lambda pid=r_proj["id"]: ui.navigate.to(
+                                        f"/project/{pid}"
+                                    ),
                                 ).props("push rounded size=md color=primary no-caps").classes(
-                                    "w-full justify-start text-left text-gray-900 font-bold shadow-md "
+                                    "w-full justify-start text-left text-gray-900 "
+                                    "font-bold shadow-md "
                                     "hover:scale-105 transition-transform duration-200 px-4 py-3"
                                 )
 

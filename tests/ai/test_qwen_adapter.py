@@ -7,9 +7,9 @@ import pytest
 
 np = pytest.importorskip("numpy")
 
-from AI.document_parser import ParsedDocument, ParsedPage
-from AI.qwen_adapter import QwenAIAdapter
-from app.models.domain import (
+from AI.document_parser import ParsedDocument, ParsedPage  # noqa: E402
+from AI.qwen_adapter import QwenAIAdapter  # noqa: E402
+from app.models.domain import (  # noqa: E402
     AIOutcome,
     Criterion,
     Document,
@@ -19,9 +19,12 @@ from app.models.domain import (
     ReportDocumentRole,
     ReportStatus,
     ReportType,
-    SourceAnchor,
 )
-from app.services.ports import AIInputDocument, CriterionExtractionRequest, ReportAnalysisRequest
+from app.services.ports import (  # noqa: E402
+    AIInputDocument,
+    CriterionExtractionRequest,
+    ReportAnalysisRequest,
+)
 
 
 class StubEmbedder:
@@ -76,7 +79,10 @@ async def test_qwen_adapter_uses_exact_local_source_text(monkeypatch):
     report_document_id = uuid4()
     now = datetime.now(UTC)
 
-    source_text = "Beneficiarul va menține trei locuri de muncă până la 30.06.2031.\nAlt text."
+    expected_source_text = (
+        "Beneficiarul va menține trei locuri de muncă până la 30.06.2031."
+    )
+    source_text = f"{expected_source_text}\nAlt text."
     report_text = "Raportul declară doar două locuri de muncă menținute în perioada analizată."
 
     source_document = Document(
@@ -137,7 +143,7 @@ async def test_qwen_adapter_uses_exact_local_source_text(monkeypatch):
         )
     )
     assert len(extraction) == 1
-    assert extraction[0].description == "Beneficiarul va menține trei locuri de muncă până la 30.06.2031."
+    assert extraction[0].description == expected_source_text
     assert extraction[0].source_anchors[0].passage == extraction[0].description
     assert extraction[0].source_anchors[0].page_number == 1
 
@@ -195,3 +201,77 @@ async def test_qwen_adapter_uses_exact_local_source_text(monkeypatch):
     assert result[0].source_anchors
     assert result[0].source_anchors[0].document_id == report_document_id
     assert result[0].source_anchors[0].passage in report_text
+
+
+@pytest.mark.asyncio
+async def test_progress_report_never_creates_obligation_proposals(monkeypatch):
+    project_id = uuid4()
+    report_document_id = uuid4()
+    now = datetime.now(UTC)
+    report_document = Document(
+        id=report_document_id,
+        project_id=project_id,
+        display_name="Rapoarte de progres",
+        original_filename="raport-progres.pdf",
+        media_type=DocumentMediaType.PDF,
+        size_bytes=100,
+        sha256="c" * 64,
+        page_count=1,
+        created_at=now,
+    )
+
+    def unexpected_parse(*args, **kwargs):
+        raise AssertionError("A progress report must not enter obligation extraction")
+
+    monkeypatch.setattr("AI.qwen_adapter.parse_document_bytes", unexpected_parse)
+
+    async def loader(handle: str):
+        return handle.encode()
+
+    llm = StubLLM()
+    adapter = QwenAIAdapter(
+        content_loader=loader,
+        model="qwen/qwen3-235b-a22b-2507",
+        base_url="https://example.invalid/api/v1",
+        api_key="synthetic-key",
+        llm=llm,
+        embedder=StubEmbedder(),
+    )
+
+    result = await adapter.extract(
+        CriterionExtractionRequest(
+            job_id=uuid4(),
+            project_id=project_id,
+            documents=(AIInputDocument(report_document, "report"),),
+            idempotency_key="synthetic-progress-report",
+        )
+    )
+
+    assert result == []
+    assert llm.calls == 0
+
+
+def test_structured_anchor_uses_canonical_source_not_semantic_serialization():
+    from AI.qwen_adapter import _PointerCandidate
+    from AI.retrieval import Chunk
+    from AI.source_units import source_units
+
+    document_id = uuid4()
+    semantic = "Nume reper: Raport final | Termen: 23-07-2025"
+    exact = "Raport final\n23-07-2025"
+    chunk = Chunk(
+        document_id=document_id,
+        page_number=33,
+        start=0,
+        end=len(semantic),
+        text=semantic,
+        kind="table_row",
+        source_text=exact,
+    )
+    candidate = _PointerCandidate("E1", chunk, source_units(semantic))
+
+    anchor = QwenAIAdapter._anchor(candidate, 0, 0)
+    assert anchor.document_id == document_id
+    assert anchor.page_number == 33
+    assert anchor.passage == exact
+    assert "Nume reper:" not in anchor.passage

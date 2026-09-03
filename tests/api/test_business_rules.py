@@ -377,3 +377,77 @@ def test_list_project_documents_and_download_content(client, auth_headers):
         headers=auth_headers,
     )
     assert missing.status_code == 404
+
+
+def test_empty_report_context_auto_selects_baseline_and_previous_reports(client, auth_headers):
+    project = _create_project(client, auth_headers, key="auto-context-project")
+
+    def upload_with_category(key: str, filename: str, category: str):
+        return _post(
+            client,
+            auth_headers,
+            f"/api/v1/projects/{project['id']}/documents",
+            key,
+            expected=201,
+            files={"file": (filename, f"synthetic-{key}".encode(), "application/pdf")},
+            data={"displayName": category},
+        ).json()
+
+    baseline = upload_with_category("auto-baseline", "baseline.pdf", "Documente inițiale")
+    previous_document = upload_with_category(
+        "auto-previous-doc", "previous.pdf", "Rapoarte de progres"
+    )
+    current_document = upload_with_category(
+        "auto-current-doc", "current.pdf", "Rapoarte de progres"
+    )
+    other_document = upload_with_category("auto-other", "other.pdf", "Alte documente")
+
+    _post(
+        client,
+        auth_headers,
+        f"/api/v1/projects/{project['id']}/criteria",
+        "auto-context-criterion",
+        expected=201,
+        json={"code": "AUTO-1", "description": "Obligație confirmată pentru test."},
+    )
+    previous = _post(
+        client,
+        auth_headers,
+        f"/api/v1/projects/{project['id']}/reports",
+        "auto-previous-report",
+        expected=201,
+        json={
+            "reportType": "durability",
+            "periodStart": "2031-01-01",
+            "periodEnd": "2031-03-31",
+            "documents": [{"documentId": previous_document["id"], "role": "main_report"}],
+        },
+    ).json()
+    current = _post(
+        client,
+        auth_headers,
+        f"/api/v1/projects/{project['id']}/reports",
+        "auto-current-report",
+        expected=201,
+        json={
+            "reportType": "durability",
+            "periodStart": "2031-04-01",
+            "periodEnd": "2031-06-30",
+            "documents": [{"documentId": current_document["id"], "role": "main_report"}],
+        },
+    ).json()
+
+    response = _post(
+        client,
+        auth_headers,
+        f"/api/v1/reports/{current['id']}/analysis-jobs",
+        "auto-context-analysis",
+        expected=202,
+        json={"projectDocumentIds": [], "previousReportIds": []},
+    )
+    job = response.json()
+
+    assert job["projectDocumentIds"] == [baseline["id"]]
+    assert job["previousReportIds"] == [previous["id"]]
+    assert other_document["id"] not in job["projectDocumentIds"]
+    assert current_document["id"] not in job["projectDocumentIds"]

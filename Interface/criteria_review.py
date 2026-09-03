@@ -1,4 +1,4 @@
-"""Human review page for AI-extracted project obligations/criteria."""
+"""Human review page for AI-extracted project obligations."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
             ).props("flat rounded no-caps size=md text-color=grey-8").classes(
                 "hover:bg-gray-100 px-4 py-2 rounded-full font-bold"
             )
-            ui.label("Extragere obligații / criterii").classes(
+            ui.label("Extragere obligații").classes(
                 "text-2xl font-extrabold text-gray-800"
             )
 
@@ -50,7 +50,7 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
             "w-full max-w-6xl rounded-[1.5rem] shadow-xl border border-yellow-100"
         ):
             ui.label(
-                "AI-ul propune obligațiile, dar acestea devin criterii active numai după "
+                "AI-ul propune obligațiile, dar acestea devin obligații confirmate numai după "
                 "confirmarea utilizatorului. Pasajele afișate sunt recuperate din sursa locală."
             ).classes("text-gray-700")
 
@@ -77,17 +77,22 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 except Exception as error:
                     ui.label(api_error_message(error)).classes("text-red-700")
                     return
-                ui.label(f"Criterii active confirmate: {len(criteria)}").classes(
+                ui.label(f"Obligații confirmate: {len(criteria)}").classes(
                     "text-xl font-extrabold text-gray-800"
                 )
                 if not criteria:
                     ui.label(
-                        "Încă nu există criterii active. Confirmă cel puțin o propunere de mai jos."
+                        "Încă nu există obligații confirmate. Confirmă cel puțin "
+                        "o propunere de mai jos."
                     ).classes("text-gray-500")
                     return
                 for criterion in criteria:
-                    with ui.card().classes("w-full shadow-sm border border-green-100 p-4"):
-                        ui.label(_clean(criterion.get("description"))).classes("text-gray-800 text-lg font-medium")
+                    with ui.card().classes(
+                        "w-full shadow-sm border border-green-100 p-4"
+                    ):
+                        ui.label(_clean(criterion.get("description"))).classes(
+                            "text-gray-800 text-lg font-medium"
+                        )
                         ui.label(
                             f"Termen: {_deadline_text(criterion.get('deadline'))}"
                         ).classes("text-sm text-gray-600")
@@ -304,7 +309,8 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                                     icon="check",
                                     on_click=lambda p=proposal: review_one(p, action="accept"),
                                 ).props("push rounded size=sm color=primary no-caps").classes(
-                                    "font-extrabold shadow-sm hover:scale-105 text-gray-900 transition-transform duration-200 px-3"
+                                    "font-extrabold shadow-sm hover:scale-105 text-gray-900 "
+                                    "transition-transform duration-200 px-3"
                                 )
                                 ui.button(
                                     "Corectează",

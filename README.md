@@ -1,8 +1,9 @@
 # ChIAtraton - ADR Nord-Est
 
 ChIAtraton este un AI verification workspace pentru raportul periodic selectat. Aplicația
-organizează proiectele, documentele, criteriile, rapoartele și dovezile, iar AI-ul propune
-constatări pe care utilizatorul le confirmă, corectează sau respinge. Nu înlocuiește
+organizează proiectele, documentele, obligațiile proiectului, rapoartele și dovezile. AI-ul
+propune obligații din documentele-sursă și evaluează progresul raportat față de obligațiile
+confirmate. Nu înlocuiește
 MyADR/MySMIS și nu execută task-uri, autorizări ori clarificări oficiale.
 
 Implementarea curentă oferă întregul workflow HTTP API v1 în modul
@@ -115,7 +116,8 @@ $env:CHIATRATON_REPORT_ANALYZER_BACKEND="qwen"
 $env:AI_PROVIDER="qwen"
 $env:AI_MODEL_NAME="qwen/qwen3-235b-a22b-2507"
 $env:AI_BASE_URL="https://openrouter.ai/api/v1"
-$env:AI_API_KEY="CHEIA_TA_NOUA"
+$secureKey = Read-Host "OpenRouter API key" -AsSecureString
+$env:AI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
 $env:AI_CONTRACT_VERSION="1.0"
 ```
 
@@ -123,6 +125,42 @@ Modelul nu furnizează direct pasajele persistate. El returnează pointeri cătr
 source-units, iar adaptorul reconstruiește local pasajul exact și pagina înainte ca
 API-ul să creeze `CriterionProposal` sau `CriterionValidation`. Detalii în
 `docs/ai-implementation.md`.
+
+### Comportamentul AI pe categoriile existente
+
+Categoriile din UI rămân neschimbate și nu necesită modificări de schemă:
+
+| Categoria UI | Comportament AI |
+|---|---|
+| `Documente legate de apel` | propune obligații/reguli monitorizabile aplicabile proiectului |
+| `Documente inițiale` | propune angajamente specifice proiectului: indicatori, ținte, termene, milestone-uri și angajamente de punctaj |
+| `Rapoarte de progres` | nu creează obligații; creează `Report` și verifică progresul față de obligațiile confirmate |
+| `Alte documente` | documente suport; nu generează automat obligații |
+
+În UI, `Criterion` este prezentat drept **Obligație**, iar `CriterionValidation` drept
+progres/verificare a obligației. Contractele și schema backend rămân neschimbate.
+
+### PDF-uri și tabele
+
+Parserul local păstrează structura tabelară înainte de retrieval/LLM:
+
+1. `OpenDataLoader PDF` este încercat primul în modul implicit `auto`;
+2. dacă OpenDataLoader/Java nu este disponibil, se folosește `PyMuPDF find_tables()`;
+3. secțiunile MySMIS `Tip: OPTIUNI` sunt tratate separat și numai variantele explicit
+   `Selectată: Da` pot ajunge în pool-ul pentru extracția obligațiilor;
+4. alternativele `Selectată: Nu`, datele izolate și metricile istorice de evaluare sunt
+   filtrate înainte/după Qwen;
+5. reprezentarea semantică a unui rând (`Header: valoare | ...`) este separată de pasajul canonic: numai un substring exact recuperat din textul PyMuPDF poate deveni `SourceAnchor`;
+6. dacă un rând structurat nu poate fi mapat mecanic la textul canonic, acel rând sintetic nu ajunge la Qwen, iar pagina brută rămâne fallback;
+7. propunerile aproape identice sunt deduplicate fără pierderea `SourceAnchor`-urilor.
+
+OpenDataLoader necesită Java 11+ și este inclus în extra-ul `ai`. Configurația implicită este:
+
+```powershell
+$env:CHIATRATON_PDF_TABLE_BACKEND="auto"
+```
+
+Poți forța `opendataloader` sau `pymupdf`. Detalii în `docs/pdf-parsing.md`.
 
 ## Matrice endpoint-uri
 
@@ -152,9 +190,12 @@ de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnaly
 
 ## Reguli importante
 
-- AI-ul creează `CriterionProposal`, nu `Criterion`; numai review-ul utilizatorului poate
-  crea criterii.
-- Review-ul batch este atomic. `accept` și `correct` creează criterii, `reject` nu creează.
+- În UI, AI-ul propune **obligații**. Intern creează `CriterionProposal`, nu `Criterion`; numai
+  review-ul utilizatorului poate crea obligația confirmată (`Criterion`).
+- Review-ul batch este atomic. `accept` și `correct` creează obligații confirmate, `reject` nu creează.
+- `Rapoarte de progres` nu intră în extractorul de obligații; ele sunt analizate prin `ReportAnalyzer`.
+- La analiza unui raport, listele goale de context sunt rezolvate automat la documentele baseline relevante și la rapoartele anterioare proiectului; nu este necesar un agent sau un contract API nou.
+- UI-ul de analiză arată implicit excepțiile acționabile (`partially_compliant`, `non_compliant`, `insufficient_evidence`) și permite afișarea tuturor obligațiilor.
 - Fiecare propunere și fiecare constatare factuală are `SourceAnchor` cu document, pagină
   și pasaj.
 - O reanalizare adaugă o nouă revizie de `CriterionValidation`; istoricul și deciziile
@@ -174,7 +215,8 @@ python -m compileall -q app tests Interface
 
 Testele validează și contractul OpenAPI 3.1, exemplele JSON, JWT, ProblemDetails,
 idempotency și întregul workflow Project → Document → CriterionProposal → Criterion →
-Report → AnalysisJob → CriterionValidation → UserDecision.
+Report → AnalysisJob → CriterionValidation → UserDecision. În UI, același flux este prezentat
+ca Documente-sursă → Obligații → Raport de progres → Progres față de obligații.
 
 ## Limitări și următoarele adaptoare
 
@@ -189,9 +231,10 @@ semantic multilingual E5 și apelează Qwen prin OpenRouter paid-only.
   prin porturile `CriterionExtractor` / `ReportAnalyzer`; modul fake rămâne pentru teste.
 - Un runner durabil și un `IdempotencyStore` extern trebuie injectate înainte de
   production.
-- Validarea faptului că pasajul AI există textual în document va fi realizată de fluxul
-  real de extracție a conținutului; adaptorul fake validează doar forma și apartenența
-  ancorei.
+- Adaptorul real separă reprezentarea semantică de evidența canonică și construiește
+  `SourceAnchor` numai din text local exact. Pentru reanalizări, parsing-ul documentelor
+  și embedding-urile textelor/query-urilor sunt cache-uite in-process după identitatea
+  imuabilă / hash-ul conținutului, fără schimbarea scorurilor de retrieval.
 
 ## Documentație
 

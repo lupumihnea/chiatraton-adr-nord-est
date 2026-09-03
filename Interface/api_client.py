@@ -350,7 +350,7 @@ class ChIAtratonAPIClient:
         )
         result = response.json()
         if not isinstance(result, dict):
-            raise APIClientError("API-ul a returnat propuneri de criterii invalide.")
+            raise APIClientError("API-ul a returnat propuneri de obligații invalide.")
         return result
 
     async def list_all_criterion_extraction_proposals(
@@ -406,7 +406,7 @@ class ChIAtratonAPIClient:
         )
         result = response.json()
         if not isinstance(result, dict):
-            raise APIClientError("API-ul a returnat criterii într-un format invalid.")
+            raise APIClientError("API-ul a returnat obligații într-un format invalid.")
         return result
 
     async def list_all_project_criteria(self, project_id: str) -> list[dict[str, Any]]:
@@ -416,12 +416,155 @@ class ChIAtratonAPIClient:
             page = await self.list_project_criteria(project_id, limit=100, cursor=cursor)
             items = page.get("items", [])
             if not isinstance(items, list):
-                raise APIClientError("API-ul a returnat criterii într-un format invalid.")
+                raise APIClientError("API-ul a returnat obligații într-un format invalid.")
             criteria.extend(item for item in items if isinstance(item, dict))
             next_cursor = page.get("nextCursor")
             if not next_cursor:
                 return criteria
             cursor = str(next_cursor)
+
+
+    async def create_project_report(
+        self,
+        project_id: str,
+        *,
+        period_start: str,
+        period_end: str,
+        document_id: str,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        payload = {
+            "reportType": "implementation_progress",
+            "periodStart": period_start,
+            "periodEnd": period_end,
+            "documents": [{"documentId": document_id, "role": "main_report"}],
+        }
+        response = await self._request(
+            "POST",
+            f"/api/v1/projects/{project_id}/reports",
+            json=payload,
+            headers={"Idempotency-Key": idempotency_key},
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat un raport invalid.")
+        return result
+
+    async def list_project_reports(
+        self,
+        project_id: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = await self._request(
+            "GET", f"/api/v1/projects/{project_id}/reports", params=params
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat rapoarte într-un format invalid.")
+        return result
+
+    async def list_all_project_reports(self, project_id: str) -> list[dict[str, Any]]:
+        reports: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            page = await self.list_project_reports(project_id, limit=100, cursor=cursor)
+            items = page.get("items", [])
+            if not isinstance(items, list):
+                raise APIClientError("API-ul a returnat rapoarte într-un format invalid.")
+            reports.extend(item for item in items if isinstance(item, dict))
+            next_cursor = page.get("nextCursor")
+            if not next_cursor:
+                return reports
+            cursor = str(next_cursor)
+
+    async def create_report_analysis_job(
+        self,
+        report_id: str,
+        *,
+        idempotency_key: str,
+        project_document_ids: list[str] | None = None,
+        previous_report_ids: list[str] | None = None,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/api/v1/reports/{report_id}/analysis-jobs",
+            json={
+                "projectDocumentIds": project_document_ids or [],
+                "previousReportIds": previous_report_ids or [],
+            },
+            headers={"Idempotency-Key": idempotency_key},
+            timeout=180.0,
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat un job de analiză a progresului invalid.")
+        return result
+
+    async def list_report_validations(
+        self,
+        report_id: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit, "includeHistory": False}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = await self._request(
+            "GET", f"/api/v1/reports/{report_id}/validations", params=params
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat rezultate de progres invalide.")
+        return result
+
+    async def list_all_report_validations(self, report_id: str) -> list[dict[str, Any]]:
+        validations: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            page = await self.list_report_validations(report_id, limit=100, cursor=cursor)
+            items = page.get("items", [])
+            if not isinstance(items, list):
+                raise APIClientError("API-ul a returnat rezultate de progres invalide.")
+            validations.extend(item for item in items if isinstance(item, dict))
+            next_cursor = page.get("nextCursor")
+            if not next_cursor:
+                return validations
+            cursor = str(next_cursor)
+
+    async def create_validation_decision(
+        self,
+        validation_id: str,
+        *,
+        validation_revision: int,
+        action: str,
+        idempotency_key: str,
+        final_outcome: str | None = None,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "action": action,
+            "validationRevision": validation_revision,
+        }
+        if final_outcome is not None:
+            payload["finalOutcome"] = final_outcome
+        if comment is not None:
+            payload["comment"] = comment
+        response = await self._request(
+            "POST",
+            f"/api/v1/validations/{validation_id}/decisions",
+            json=payload,
+            headers={"Idempotency-Key": idempotency_key},
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat o decizie de validare invalidă.")
+        return result
 
 
 api_client = ChIAtratonAPIClient.from_environment()

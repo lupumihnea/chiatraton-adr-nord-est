@@ -1,18 +1,36 @@
-"""Project details using Andrei's supplied 3/4 + 1/4 layout.
+"""Project details with obligations and progress reports.
 
-The page shell is rendered immediately. API reads happen only after the
-NiceGUI browser connection exists, so a busy AI backend cannot trigger
-NiceGUI's default 3-second page-build timeout.
+Backend contract names remain Criterion/Report. The UI deliberately presents
+criteria as obligations and reports as progress against those obligations.
 """
+
+from __future__ import annotations
+
+from typing import Any
 
 from nicegui import app, ui
 
-from Interface.api_client import api_client, api_error_message
+from Interface.api_client import (
+    IdempotencyKeyManager,
+    api_client,
+    api_error_message,
+    json_fingerprint,
+)
+
+REPORT_STATUS_LABELS = {
+    "created": "Pregătit pentru analiză",
+    "analysis_queued": "Analiză în așteptare",
+    "analysis_in_progress": "Analiză în curs",
+    "awaiting_user_decision": "Progres analizat",
+    "completed": "Finalizat",
+    "analysis_failed": "Analiza a eșuat",
+}
 
 
 @ui.page("/project/{project_id}")
 async def project_details_page(project_id: str) -> None:
     ui.colors(primary="#ffcc00", accent="#ffcc00")
+    key_manager = IdempotencyKeyManager()
 
     with ui.column().classes("w-full items-center min-h-[85vh] bg-gray-50/30"):
         with ui.row().classes("w-full max-w-6xl p-4"):
@@ -29,7 +47,7 @@ async def project_details_page(project_id: str) -> None:
             ui.spinner(size="lg")
             loading_label = ui.label("Se încarcă proiectul...")
 
-        content = ui.column().classes("w-full items-center gap-6")
+        content = ui.column().classes("w-full items-center gap-6 pb-8")
 
         async def open_document(document_id: str, fallback_name: str) -> None:
             # A plain <a href> to the API would ship without the bearer
@@ -48,9 +66,7 @@ async def project_details_page(project_id: str) -> None:
             except Exception as error:
                 loading.set_visibility(False)
                 with content:
-                    ui.label(api_error_message(error)).classes(
-                        "text-red-700 font-bold"
-                    )
+                    ui.label(api_error_message(error)).classes("text-red-700 font-bold")
                     ui.button(
                         "Reîncearcă",
                         on_click=lambda: ui.navigate.to(f"/project/{project_id}"),
@@ -82,7 +98,7 @@ async def project_details_page(project_id: str) -> None:
             )
             app.recent_projects = recent[:5]
 
-            loading_label.text = "Se încarcă documentele și obligațiile..."
+            loading_label.text = "Se încarcă documentele, obligațiile și rapoartele..."
             try:
                 documents = await api_client.list_all_project_documents(project_id)
             except Exception as error:
@@ -99,8 +115,52 @@ async def project_details_page(project_id: str) -> None:
             else:
                 criteria_error = None
 
+            try:
+                reports = await api_client.list_all_project_reports(project_id)
+            except Exception as error:
+                reports = []
+                reports_error = api_error_message(error)
+            else:
+                reports_error = None
+
             loading.set_visibility(False)
             content.clear()
+
+            async def start_report_analysis(report: dict[str, Any]) -> None:
+                report_id = str(report.get("id") or "")
+                if not report_id:
+                    ui.notify("Raportul nu are ID.", type="negative")
+                    return
+                if not criteria:
+                    ui.notify(
+                        "Confirmă mai întâi cel puțin o obligație a proiectului.",
+                        type="warning",
+                    )
+                    return
+                payload = {
+                    "reportId": report_id,
+                    "projectDocumentIds": [],
+                    "previousReportIds": [],
+                }
+                fingerprint = json_fingerprint(payload)
+                operation = f"analyze-progress:{report_id}"
+                key = key_manager.key_for(operation, fingerprint)
+                try:
+                    job = await api_client.create_report_analysis_job(
+                        report_id,
+                        idempotency_key=key,
+                    )
+                except Exception as error:
+                    ui.notify(api_error_message(error), type="negative", timeout=10000)
+                    return
+                key_manager.mark_succeeded(operation, fingerprint)
+                job_id = str(job.get("id") or "")
+                if not job_id:
+                    ui.notify("Job-ul de analiză nu are ID.", type="negative")
+                    return
+                ui.navigate.to(
+                    f"/project/{project_id}/report-analysis/{report_id}/{job_id}"
+                )
 
             with content:
                 with ui.row().classes(
@@ -219,10 +279,19 @@ async def project_details_page(project_id: str) -> None:
                     with ui.row().classes("w-full items-center justify-between gap-3"):
                         with ui.row().classes("items-center gap-2"):
                             ui.icon("fact_check", size="sm").classes("text-yellow-600")
-                            ui.label("Obligații / criterii active").classes(
+                            ui.label("Obligații confirmate").classes(
                                 "text-2xl font-extrabold text-gray-800"
                             )
+                        ui.button(
+                            "Încarcă documente și extrage obligații",
+                            icon="document_scanner",
+                            on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
+                        ).props("outline rounded no-caps")
 
+                    ui.label(
+                        "Obligațiile provin din documentele legate de apel și din "
+                        "documentele inițiale ale proiectului."
+                    ).classes("text-sm text-gray-600")
                     ui.separator().classes("my-3 opacity-50")
 
                     if criteria_error:
@@ -230,9 +299,8 @@ async def project_details_page(project_id: str) -> None:
 
                     if not criteria:
                         ui.label(
-                            "Nu există încă obligații confirmate. După upload, extragerea AI "
-                            "pornește automat și vei fi dus la pagina unde confirmi/corectezi/"
-                            "respingi propunerile."
+                            "Nu există încă obligații confirmate. Încarcă documentele-sursă, "
+                            "apoi confirmă/corectează/respinge propunerile AI."
                         ).classes("text-gray-600")
                     else:
                         ui.label(f"{len(criteria)} obligații confirmate").classes(
@@ -253,8 +321,9 @@ async def project_details_page(project_id: str) -> None:
                                     "text-sm text-gray-600"
                                 )
                                 for anchor in criterion.get("sourceAnchors") or []:
+                                    page_number = anchor.get("pageNumber", "?")
                                     with ui.expansion(
-                                        f"Sursă · pagina {anchor.get('pageNumber', '?')}",
+                                        f"Sursa obligației · pagina {page_number}",
                                         icon="article",
                                     ).classes("w-full"):
                                         doc_id = anchor.get("documentId")
@@ -273,8 +342,71 @@ async def project_details_page(project_id: str) -> None:
                                             )
                                         ).classes("whitespace-normal")
 
-        # Explicitly flush the page shell to the browser before any API request.
-        # NiceGUI treats connected() as the boundary after which long-running
-        # async work is safe and updates are delivered over the websocket.
+                with ui.column().classes(
+                    "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
+                    "border border-blue-100"
+                ):
+                    with ui.row().classes("items-center gap-2"):
+                        ui.icon("timeline", size="sm").classes("text-blue-600")
+                        ui.label("Rapoarte de progres").classes(
+                            "text-2xl font-extrabold text-gray-800"
+                        )
+                    ui.label(
+                        "Rapoartele nu adaugă obligații. AI-ul le compară cu obligațiile "
+                        "confirmate și produce numai starea/progresul fiecărei obligații."
+                    ).classes("text-sm text-gray-600")
+                    ui.separator().classes("my-3 opacity-50")
+
+                    if reports_error:
+                        ui.label(reports_error).classes("text-red-700")
+
+                    if not reports:
+                        ui.label(
+                            "Nu există încă rapoarte de progres încărcate."
+                        ).classes("text-gray-600")
+                    else:
+                        for report in reports:
+                            status = str(report.get("status", "created"))
+                            with ui.card().classes(
+                                "w-full shadow-sm rounded-xl border border-blue-100"
+                            ):
+                                with ui.row().classes(
+                                    "w-full items-center justify-between gap-3"
+                                ):
+                                    with ui.column().classes("gap-1"):
+                                        ui.label("Raport de progres").classes(
+                                            "font-extrabold text-blue-800"
+                                        )
+                                        ui.label(
+                                            f"Perioadă: {report.get('periodStart', '?')} → "
+                                            f"{report.get('periodEnd', '?')}"
+                                        ).classes("text-gray-700")
+                                        ui.label(
+                                            f"Status: {REPORT_STATUS_LABELS.get(status, status)}"
+                                        ).classes("text-sm font-bold text-gray-600")
+
+                                    if status in {"created", "analysis_failed"}:
+                                        button = ui.button(
+                                            "Analizează progresul",
+                                            icon="psychology",
+                                            on_click=lambda r=report: start_report_analysis(r),
+                                        ).props("no-caps")
+                                        if not criteria:
+                                            button.disable()
+                                    elif status in {"awaiting_user_decision", "completed"}:
+                                        ui.button(
+                                            "Vezi progresul",
+                                            icon="visibility",
+                                            on_click=lambda r=report: ui.navigate.to(
+                                                f"/project/{project_id}/report-analysis/"
+                                                f"{r.get('id')}/results"
+                                            ),
+                                        ).props("outline no-caps")
+                                    else:
+                                        ui.label(
+                                            "Analiza rulează în fundal; reîncarcă pagina "
+                                            "pentru status."
+                                        ).classes("text-sm text-blue-700")
+
         await ui.context.client.connected(timeout=10.0)
         await load_after_connect()
