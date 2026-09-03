@@ -2,6 +2,7 @@ import os
 from nicegui import app, ui
 import add_project
 import project_details
+import upload_documents
 
 # Includem un font prietenos ("Quicksand") și stilizăm fundalul
 ui.add_head_html('''
@@ -56,7 +57,7 @@ def home():
                 
             # Bază de date simulată (mock) pentru showcase
             mock_db = ['123456', '111111', '999999']
-
+            #TO DO: verificarea reală în bază dacă există
             exists = code in mock_db
 
             if exists:
@@ -73,3 +74,4 @@ def home():
 
 
 ui.run(title="ADR Analizator")
+
