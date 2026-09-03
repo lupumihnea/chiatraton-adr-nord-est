@@ -3,7 +3,7 @@ from typing import Optional,List
 from datetime import datetime
 
 from DAO.obligations_DAO import ObligationDAO
-from reference import Reference
+from Objects.reference import Reference
 
 
 @dataclass

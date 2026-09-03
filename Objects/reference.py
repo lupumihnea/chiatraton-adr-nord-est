@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from DAO.references_DAO import ReferenceDAO
-from document import Document
+from Objects.document import Document
 
 
 @dataclass

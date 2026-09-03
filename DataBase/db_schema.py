@@ -1,8 +1,7 @@
-import sqlite3
+import aiosqlite
 
 
-def create_database_schema(con):
-    con.executescript("""
+SCHEMA_SQL="""
     CREATE TABLE IF NOT EXISTS projects(
         id TEXT PRIMARY KEY ,
         call_id INTEGER NOT NULL,
@@ -31,9 +30,13 @@ def create_database_schema(con):
         subchapter TEXT,
         FOREIGN KEY(obligation_id) REFERENCES obligations(id) ON DELETE CASCADE,
         FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE);
-    """)
+    """
 
-def setup_database():
-    con = sqlite3.connect('documents.db')
-    create_database_schema(con)
+async def create_database_schema(con: aiosqlite.Connection) -> None:
+    await con.executescript(SCHEMA_SQL)
+    await con.commit()
+
+async def setup_database()-> aiosqlite.Connection:
+    con = await aiosqlite.connect('documents.db')
+    await create_database_schema(con)
     return con
