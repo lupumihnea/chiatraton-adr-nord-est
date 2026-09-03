@@ -8,7 +8,6 @@ from fastapi import APIRouter, Response, status
 
 from app.api.dependencies import CurrentUserDep, IdempotencyDep
 from app.core.config import Settings
-from app.core.exceptions import OperationNotImplementedError
 from app.main import create_app
 
 TEST_SECRET = "synthetic-idempotency-test-secret"
@@ -31,9 +30,9 @@ class IdempotencyHarness:
             self.executions[counter_key] += 1
             execution = self.executions[counter_key]
             if payload.get("delay"):
-                await asyncio.sleep(0.05)
-            if payload.get("force5xx"):
-                raise OperationNotImplementedError("testOnlyFailure")
+            await asyncio.sleep(0.05)
+        if payload.get("force5xx"):
+            raise RuntimeError("synthetic test-only failure")
             response.headers["Location"] = f"/__test__/idempotency/{response_resource}/{execution}"
             return {
                 "executionCount": execution,

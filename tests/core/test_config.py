@@ -33,12 +33,28 @@ def test_production_rejects_process_local_idempotency():
         )
 
 
-def test_production_accepts_external_idempotency_configuration():
+def test_production_rejects_any_local_application_adapter():
+    with pytest.raises(ValidationError, match="Production requires external adapters"):
+        Settings(
+            _env_file=None,
+            environment="production",
+            jwt_secret="synthetic-production-secret",
+            idempotency_backend="external",
+            docs_enabled=False,
+        )
+
+
+def test_production_accepts_only_external_adapter_configuration():
     settings = Settings(
         _env_file=None,
         environment="production",
         jwt_secret="synthetic-production-secret",
         idempotency_backend="external",
+        repository_backend="external",
+        document_storage_backend="external",
+        criterion_extractor_backend="external",
+        report_analyzer_backend="external",
+        job_runner_backend="external",
         docs_enabled=False,
     )
 
