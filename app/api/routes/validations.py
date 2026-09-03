@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Path, Query, Response, status
 
 from app.api.dependencies import ApplicationServiceDep, CurrentUserDep, IdempotencyDep
 from app.api.responses import problem_responses, success_response
@@ -48,8 +48,11 @@ async def list_report_validations(
 async def create_validation_decision(
     validation_id: ValidationId,
     data: UserDecisionCreate,
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
 ) -> UserDecision:
-    return await service.create_validation_decision(validation_id, data, user, idempotency)
+    decision = await service.create_validation_decision(validation_id, data, user, idempotency)
+    response.headers["Location"] = f"/api/v1/validations/{validation_id}/decisions"
+    return decision

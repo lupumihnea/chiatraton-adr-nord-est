@@ -1,7 +1,7 @@
-"""Application service abstractions and current explicit stub."""
+"""Application-service ports and local implementations."""
 
+from app.services.default import DefaultApplicationService
 from app.services.idempotency import IdempotencyStore
 from app.services.interfaces import ApplicationService
-from app.services.stubs import UnimplementedApplicationService
 
-__all__ = ["ApplicationService", "IdempotencyStore", "UnimplementedApplicationService"]
+__all__ = ["ApplicationService", "DefaultApplicationService", "IdempotencyStore"]
