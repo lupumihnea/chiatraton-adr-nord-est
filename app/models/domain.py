@@ -117,14 +117,6 @@ class ProjectCreate(APIModel):
     smis_code: str | None = Field(default=None, pattern=r"^[0-9]{6}$")
     funding_call_id: int | None = Field(default=None, ge=1)
     beneficiary_name: str | None = Field(default=None, min_length=1, max_length=200)
-    completion_date: date
-    monitoring_end_date: date
-
-    @model_validator(mode="after")
-    def monitoring_cannot_end_early(self) -> Self:
-        if self.monitoring_end_date < self.completion_date:
-            raise ValueError("monitoringEndDate must be on or after completionDate")
-        return self
 
 
 class Project(ProjectCreate):

@@ -735,7 +735,7 @@ components:
     ProjectCreate:
       type: object
       additionalProperties: false
-      required: [name, completionDate, monitoringEndDate]
+      required: [name]
       properties:
         name:
           type: string
@@ -760,13 +760,6 @@ components:
               minLength: 1
               maxLength: 200
             - type: 'null'
-        completionDate:
-          type: string
-          format: date
-        monitoringEndDate:
-          type: string
-          format: date
-          description: Dată contractuală explicită, nu valoare calculată de API.
 
     Project:
       type: object
@@ -777,8 +770,6 @@ components:
         - smisCode
         - fundingCallId
         - beneficiaryName
-        - completionDate
-        - monitoringEndDate
         - createdAt
         - updatedAt
       properties:
@@ -805,13 +796,6 @@ components:
               minLength: 1
               maxLength: 200
             - type: 'null'
-        completionDate:
-          type: string
-          format: date
-        monitoringEndDate:
-          type: string
-          format: date
-          description: Dată contractuală explicită, nu valoare calculată de API.
         createdAt:
           type: string
           format: date-time

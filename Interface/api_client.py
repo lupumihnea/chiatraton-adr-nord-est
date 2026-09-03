@@ -10,6 +10,9 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DEFAULT_API_BASE_URL = "http://127.0.0.1:8000"
 

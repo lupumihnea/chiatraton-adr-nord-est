@@ -2,11 +2,7 @@ def test_missing_idempotency_key_is_rejected(client, auth_headers):
     response = client.post(
         "/api/v1/projects",
         headers=auth_headers,
-        json={
-            "name": "Synthetic monitoring project",
-            "completionDate": "2030-12-31",
-            "monitoringEndDate": "2033-12-31",
-        },
+        json={"name": "Synthetic monitoring project"},
     )
 
     assert response.status_code == 422
@@ -20,11 +16,7 @@ def test_project_creation_is_functional_with_authentication_and_idempotency(clie
     response = client.post(
         "/api/v1/projects",
         headers={**auth_headers, "Idempotency-Key": "synthetic-create-project-1"},
-        json={
-            "name": "Synthetic monitoring project",
-            "completionDate": "2030-12-31",
-            "monitoringEndDate": "2033-12-31",
-        },
+        json={"name": "Synthetic monitoring project"},
     )
 
     assert response.status_code == 201
@@ -34,11 +26,7 @@ def test_project_creation_is_functional_with_authentication_and_idempotency(clie
 
 def test_real_operation_replays_and_conflicts(client, auth_headers):
     headers = {**auth_headers, "Idempotency-Key": "synthetic-real-replay"}
-    payload = {
-        "name": "Synthetic replay project",
-        "completionDate": "2030-12-31",
-        "monitoringEndDate": "2033-12-31",
-    }
+    payload = {"name": "Synthetic replay project"}
 
     original = client.post("/api/v1/projects", headers=headers, json=payload)
     replay = client.post("/api/v1/projects", headers=headers, json=payload)

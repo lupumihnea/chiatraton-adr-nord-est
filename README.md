@@ -70,8 +70,6 @@ $body = @{
   smisCode = "654321"
   fundingCallId = 42
   beneficiaryName = "Synthetic beneficiary"
-  completionDate = "2030-12-31"
-  monitoringEndDate = "2033-12-31"
 } | ConvertTo-Json
 Invoke-RestMethod http://127.0.0.1:8000/api/v1/projects `
   -Method Post -Headers $headers -ContentType application/json -Body $body

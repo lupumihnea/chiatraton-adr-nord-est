@@ -92,11 +92,7 @@ Răspunsurile de creare includ `Location` spre resursa creată.
 - `name`: 1-200 caractere;
 - `smisCode`: opțional, exact șase cifre; identificator extern de căutare, nu ID public;
 - `fundingCallId`: opțional, număr întreg pozitiv pentru apelul de finanțare;
-- `beneficiaryName`: opțional, 1-200 caractere;
-- `completionDate`: data finalizării proiectului;
-- `monitoringEndDate`: data contractuală explicită până la care pot exista rapoarte, egală cu sau ulterioară `completionDate`.
-
-API-ul nu calculează `monitoringEndDate` dintr-un număr de ani. O dată contractuală schimbată ulterior va necesita un endpoint și o decizie de contract separate.
+- `beneficiaryName`: opțional, 1-200 caractere.
 
 ### Project
 
@@ -310,9 +306,9 @@ Toate erorile folosesc `application/problem+json`:
   "requestId": "req_01J00000000000000000000000",
   "errors": [
     {
-      "field": "monitoringEndDate",
-      "code": "date_order",
-      "message": "monitoringEndDate must be on or after completionDate."
+      "field": "smisCode",
+      "code": "pattern_mismatch",
+      "message": "smisCode must be exactly six digits."
     }
   ]
 }

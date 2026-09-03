@@ -54,8 +54,6 @@ async def test_create_project_sends_exact_payload_and_idempotency_key() -> None:
         "smisCode": "654321",
         "fundingCallId": 42,
         "beneficiaryName": "Organizație Sintetică Delta",
-        "completionDate": "2030-06-30",
-        "monitoringEndDate": "2033-06-30",
     }
 
     async def handler(request: httpx.Request) -> httpx.Response:
@@ -81,8 +79,6 @@ async def test_create_project_sends_exact_payload_and_idempotency_key() -> None:
         "smisCode",
         "fundingCallId",
         "beneficiaryName",
-        "completionDate",
-        "monitoringEndDate",
     }
 
 
@@ -137,15 +133,15 @@ async def test_problem_details_is_preserved_for_ui_error_display() -> None:
                 "type": "https://example.test/problems/validation-error",
                 "title": "Request validation failed",
                 "status": 422,
-                "detail": "monitoringEndDate must be on or after completionDate",
+                "detail": "smisCode must be exactly six digits.",
                 "instance": "/api/v1/projects",
                 "code": "validation_error",
                 "requestId": "synthetic-request-id",
                 "errors": [
                     {
-                        "field": "monitoringEndDate",
-                        "code": "value_error",
-                        "message": "Invalid date range",
+                        "field": "smisCode",
+                        "code": "pattern_mismatch",
+                        "message": "Invalid SMIS code",
                     }
                 ],
             },
@@ -158,11 +154,7 @@ async def test_problem_details_is_preserved_for_ui_error_display() -> None:
     )
     with pytest.raises(APIProblemError) as caught:
         await client.create_project(
-            {
-                "name": "Sintetic",
-                "completionDate": "2033-01-01",
-                "monitoringEndDate": "2030-01-01",
-            },
+            {"name": "Sintetic", "smisCode": "invalid"},
             idempotency_key="problem-key",
         )
     await client.close()
@@ -170,7 +162,7 @@ async def test_problem_details_is_preserved_for_ui_error_display() -> None:
     assert caught.value.problem.status == 422
     assert caught.value.problem.code == "validation_error"
     assert caught.value.problem.request_id == "synthetic-request-id"
-    assert caught.value.problem.errors[0]["field"] == "monitoringEndDate"
+    assert caught.value.problem.errors[0]["field"] == "smisCode"
 
 
 @pytest.mark.anyio

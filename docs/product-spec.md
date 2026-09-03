@@ -27,7 +27,7 @@ Pentru contractele noi se folosește `criteria`, nu `obligations`. Pentru lucrul
 
 ### 4.1 Configurarea proiectului
 
-Utilizatorul poate crea un `Project`, îi poate stabili data finalizării și `monitoringEndDate` și îi poate atașa `Document`. Un proiect poate păstra opțional `smisCode`, `fundingCallId` și `beneficiaryName` pentru identificare în UI și trasabilitate către sistemele externe. UUID-ul rămâne identitatea publică a resursei. `monitoringEndDate` este data contractuală explicită până la care proiectul primește rapoarte și trebuie să fie egală cu sau ulterioară datei finalizării.
+Utilizatorul poate crea un `Project` și îi poate atașa `Document`. Un proiect poate păstra opțional `smisCode`, `fundingCallId` și `beneficiaryName` pentru identificare în UI și trasabilitate către sistemele externe. UUID-ul rămâne identitatea publică a resursei.
 
 ### 4.2 Stabilirea criteriilor
 
@@ -37,7 +37,7 @@ AI-ul poate propune `Criterion` din documentele proiectului. Utilizatorul confir
 
 Un `Project` primește `Report` periodice. Produsul trebuie să poată reprezenta cel puțin rapoarte de progres din implementare, raportul final și rapoarte de durabilitate post-implementare, fără a presupune aceeași cadență pentru toate tipurile.
 
-Rapoartele continuă până la `monitoringEndDate`. Cadența este metadată a raportului sau a proiectului, nu logică fixată în UI. Un raport are exact un document principal și poate avea mai multe documente suport.
+Cadența este metadată a raportului sau a proiectului, nu logică fixată în UI. Un raport are exact un document principal și poate avea mai multe documente suport.
 
 Statusul intern ChIAtraton este separat de `externalStatus`. Un raport poate păstra `externalSystem`, `externalId`, `externalUrl` și `externalStatus` fără a executa acțiuni în MyADR/MySMIS.
 
@@ -72,7 +72,6 @@ Datele sunt izolate pe raport. Validarea Raportului 2 nu suprascrie validarea Ra
 5. Nicio ieșire AI nu este decizie finală.
 6. Orice `UserDecision` indică autorul, momentul, acțiunea și revizia validării asupra căreia s-a decis.
 7. Istoricul rapoartelor și al deciziilor este append-only din perspectiva domeniului.
-8. Un raport cu perioada după `monitoringEndDate` nu poate intra în fluxul normal fără o justificare explicită.
 
 ## 6. Cerințe nefuncționale
 
@@ -95,7 +94,6 @@ Datele sunt izolate pe raport. Validarea Raportului 2 nu suprascrie validarea Ra
 ## 8. Criterii de acceptare ale contextului de proiect
 
 - Toți termenii canonici sunt definiți și folosiți consecvent.
-- Perioada de monitorizare folosește `monitoringEndDate`, data contractuală explicită.
 - Modelul descrie validări separate per raport și criteriu.
 - Contractul AI refuză constatări fără document, pagină și pasaj.
 - Responsabilitatea deciziei finale este atribuită utilizatorului.

@@ -68,8 +68,6 @@ async def project_details_page(project_id: str) -> None:
                     ("Identificator Apel", project.get("fundingCallId") or "—"),
                     ("Nume Proiect", project["name"]),
                     ("Nume Beneficiar", project.get("beneficiaryName") or "—"),
-                    ("Data finalizării", project["completionDate"]),
-                    ("Sfârșitul monitorizării", project["monitoringEndDate"]),
                 )
                 with ui.grid(columns=2).classes("w-full gap-4"):
                     for label, value in details:

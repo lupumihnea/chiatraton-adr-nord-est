@@ -1,4 +1,4 @@
-"""Project creation using Andrei's supplied card design and the HTTP API."""
+"""Project creation using Andrei's latest card design and the HTTP API."""
 
 from uuid import uuid4
 
@@ -84,24 +84,6 @@ def add_project_page() -> None:
                     'input-class="text-base font-bold"'
                 ).classes("w-full text-base bg-gray-50 rounded-xl")
 
-            with ui.column().classes("w-full space-y-1"):
-                ui.label("Data finalizării (obligatoriu)").classes(
-                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
-                )
-                completion_date = ui.input().props(
-                    "rounded outlined hide-bottom-space type=date "
-                    'input-class="text-base font-bold"'
-                ).classes("w-full text-base bg-gray-50 rounded-xl")
-
-            with ui.column().classes("w-full space-y-1"):
-                ui.label("Sfârșitul monitorizării (obligatoriu)").classes(
-                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
-                )
-                monitoring_end_date = ui.input().props(
-                    "rounded outlined hide-bottom-space type=date "
-                    'input-class="text-base font-bold"'
-                ).classes("w-full text-base bg-gray-50 rounded-xl")
-
             ui.separator().classes("my-2 opacity-50")
 
             error_label = ui.label().classes(
@@ -129,8 +111,6 @@ def add_project_page() -> None:
                     funding_call = str(funding_call_id.value or "").strip()
                     name = str(project_name.value or "").strip()
                     beneficiary = str(beneficiary_name.value or "").strip()
-                    completed = str(completion_date.value or "").strip()
-                    monitored_until = str(monitoring_end_date.value or "").strip()
                     error_label.set_visibility(False)
 
                     if len(smis) != 6 or not smis.isdigit():
@@ -149,17 +129,9 @@ def add_project_page() -> None:
                             classes="font-bold",
                         )
                         return
-                    if not name or not completed or not monitored_until:
+                    if not name:
                         ui.notify(
-                            "Completează numele și ambele date.",
-                            type="negative",
-                            position="top",
-                            classes="font-bold",
-                        )
-                        return
-                    if monitored_until < completed:
-                        ui.notify(
-                            "Sfârșitul monitorizării nu poate preceda data finalizării.",
+                            "Completează numele proiectului.",
                             type="negative",
                             position="top",
                             classes="font-bold",
@@ -171,8 +143,6 @@ def add_project_page() -> None:
                         "smisCode": smis,
                         "fundingCallId": int(funding_call),
                         "beneficiaryName": beneficiary or None,
-                        "completionDate": completed,
-                        "monitoringEndDate": monitored_until,
                     }
                     fingerprint = json_fingerprint(payload)
                     idempotency_key = key_manager.key_for(operation, fingerprint)

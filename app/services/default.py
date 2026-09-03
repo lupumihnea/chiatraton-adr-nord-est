@@ -172,8 +172,6 @@ class DefaultApplicationService:
             smis_code=data.smis_code,
             funding_call_id=data.funding_call_id,
             beneficiary_name=data.beneficiary_name,
-            completion_date=data.completion_date,
-            monitoring_end_date=data.monitoring_end_date,
             created_at=timestamp,
             updated_at=timestamp,
         )
@@ -460,14 +458,7 @@ class DefaultApplicationService:
             updated_at=timestamp,
         )
         async with self._uow_factory() as uow:
-            project = await self._owned_project(uow, project_id, user)
-            if data.period_end > project.monitoring_end_date:
-                raise _problem(
-                    422,
-                    "validation_error",
-                    "Request validation failed",
-                    "The report period cannot end after monitoringEndDate.",
-                )
+            await self._owned_project(uow, project_id, user)
             for association in data.documents:
                 document = await uow.documents.get(association.document_id)
                 if document is None or document.project_id != project_id:

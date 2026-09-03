@@ -28,8 +28,6 @@ def test_project_ui_metadata_round_trips_without_breaking_legacy_projects(
             "smisCode": "654321",
             "fundingCallId": 42,
             "beneficiaryName": "Organizație Sintetică Delta",
-            "completionDate": "2030-12-31",
-            "monitoringEndDate": "2033-12-31",
         },
     )
     project = response.json()
@@ -143,7 +141,7 @@ def test_documents_criteria_and_report_project_boundaries(client, auth_headers):
     assert cross_project_report.json()["code"] == "validation_error"
 
 
-def test_report_primary_and_monitoring_period_rules(client, auth_headers):
+def test_report_requires_exactly_one_primary_document(client, auth_headers):
     project = _create_project(client, auth_headers)
     first = _upload(client, auth_headers, project["id"], "doc-1", "one.pdf", b"one")
     second = _upload(client, auth_headers, project["id"], "doc-2", "two.pdf", b"two")
@@ -165,21 +163,6 @@ def test_report_primary_and_monitoring_period_rules(client, auth_headers):
         },
     )
     assert two_primaries.json()["code"] == "validation_error"
-
-    after_monitoring = _post(
-        client,
-        auth_headers,
-        f"/api/v1/projects/{project['id']}/reports",
-        "after-monitoring",
-        expected=422,
-        json={
-            "reportType": "durability",
-            "periodStart": "2033-01-01",
-            "periodEnd": "2034-01-01",
-            "documents": [{"documentId": first["id"], "role": "main_report"}],
-        },
-    )
-    assert after_monitoring.json()["code"] == "validation_error"
 
 
 def test_proposal_review_batch_is_atomic_and_stale_revision_conflicts(client, auth_headers):

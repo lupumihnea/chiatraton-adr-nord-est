@@ -62,11 +62,7 @@ def test_every_json_example_is_covered():
 
 
 def test_project_ui_metadata_is_optional_and_serialized_with_contract_names():
-    legacy_payload = {
-        "name": "Proiect sintetic fără metadate externe",
-        "completionDate": "2030-06-30",
-        "monitoringEndDate": "2033-06-30",
-    }
+    legacy_payload = {"name": "Proiect sintetic fără metadate externe"}
     assert ProjectCreate.model_validate(legacy_payload).smis_code is None
 
     payload = {
@@ -90,8 +86,6 @@ def test_project_ui_metadata_is_optional_and_serialized_with_contract_names():
 def test_project_ui_metadata_rejects_invalid_values(field, value):
     payload = {
         "name": "Proiect sintetic",
-        "completionDate": "2030-06-30",
-        "monitoringEndDate": "2033-06-30",
         field: value,
     }
     with pytest.raises(ValueError):
