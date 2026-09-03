@@ -15,7 +15,7 @@ def project_details_page(code: str):
                 .classes('hover:bg-gray-100 px-4 py-2 rounded-full font-bold')
                 
         # Secțiunea principală împărțită 3/4 și 1/4
-        with ui.row().classes('w-full max-w-6xl px-4 gap-6 flex-nowrap'):
+        with ui.row().classes('w-full max-w-6xl px-4 gap-6 flex-nowrap items-stretch'):
             
             # Partea stângă (3/4) - Detalii Proiect
             with ui.column().classes('w-3/4 bg-white shadow-xl rounded-[1.5rem] p-6 border border-yellow-100'):
@@ -49,9 +49,7 @@ def project_details_page(code: str):
 
             # Partea dreaptă (1/4) - Buton Upload
             with ui.column().classes('w-1/4 items-center justify-center bg-yellow-50 shadow-xl rounded-[1.5rem] p-6 border-2 border-yellow-200 transition-all hover:bg-yellow-100/80'):
-                ui.icon('cloud_upload', size='50px').classes('text-yellow-600 mb-2')
-                ui.label('Analiză Inteligentă').classes('text-lg font-extrabold text-gray-800 text-center mb-1 leading-tight')
-                ui.label('Încarcă documente pentru a extrage automat datele lipsă.').classes('text-xs text-gray-600 text-center mb-6')
+                ui.icon('cloud_upload', size='50px').classes('text-yellow-600 mb-4')
                 
                 # Navigare către viitoarea pagină de upload (de ex. /upload/123456)
                 ui.button('Încarcă Documente', icon='upload_file', on_click=lambda: ui.navigate.to(f'/upload/{code}')) \
