@@ -8,6 +8,7 @@ contracts/ai-contract.md.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -144,6 +145,9 @@ class QwenAIAdapter:
         )
         self._embedding_model = embedding_model
         self._embedder = embedder
+        # SentenceTransformer/PyMuPDF are synchronous and CPU-heavy.  Keep them
+        # off FastAPI's event loop so creating/polling an AI job stays responsive.
+        self._retrieval_lock = asyncio.Lock()
 
     def _dense_embedder(self) -> MultilingualDenseRetriever:
         if self._embedder is None:
@@ -157,7 +161,8 @@ class QwenAIAdapter:
             if content is None:
                 raise AIResponseValidationError("missing document content")
             try:
-                document = parse_document_bytes(
+                document = await asyncio.to_thread(
+                    parse_document_bytes,
                     item.metadata.id,
                     str(item.metadata.media_type),
                     content,
@@ -168,6 +173,25 @@ class QwenAIAdapter:
                 ) from exc
             parsed.append(document)
         return tuple(parsed)
+
+    def _select_extraction_candidates_sync(
+        self, chunks: tuple[Chunk, ...]
+    ) -> list[Chunk]:
+        """CPU-bound embedding/index work; always call through ``to_thread``."""
+        index = ChunkIndex(chunks, self._dense_embedder())
+        return index.extraction_candidates(max_per_document=32, top_k_per_query=8)
+
+    def _analysis_evidence_sync(
+        self,
+        chunks: tuple[Chunk, ...],
+        criteria: tuple[Criterion, ...],
+    ) -> dict[UUID, tuple[_PointerCandidate, ...]]:
+        """Build dense index and retrieve evidence without blocking the API loop."""
+        index = ChunkIndex(chunks, self._dense_embedder())
+        return {
+            criterion.id: self._evidence_for_criterion(index, criterion, number=number)
+            for number, criterion in enumerate(criteria, start=1)
+        }
 
     @staticmethod
     def _candidate(chunk: Chunk, candidate_id: str) -> _PointerCandidate | None:
@@ -223,13 +247,34 @@ class QwenAIAdapter:
         self,
         request: CriterionExtractionRequest,
     ) -> list[CriterionProposalCandidate]:
+        print(
+            f"[AI] criterion extraction {request.job_id}: "
+            f"parsing {len(request.documents)} document(s)...",
+            flush=True,
+        )
         parsed = await self._parse_inputs(request.documents)
-        chunks = chunk_documents(parsed)
+        chunks = await asyncio.to_thread(chunk_documents, parsed)
+        print(
+            f"[AI] criterion extraction {request.job_id}: "
+            f"built {len(chunks)} text chunk(s); semantic retrieval...",
+            flush=True,
+        )
         if not chunks:
             return []
 
-        index = ChunkIndex(chunks, self._dense_embedder())
-        selected = index.extraction_candidates(max_per_document=32, top_k_per_query=8)
+        # Loading the embedding model and encoding passages/queries may take many
+        # seconds on the first run.  If done directly here it blocks uvicorn and
+        # makes the UI incorrectly report that the API is unavailable.
+        async with self._retrieval_lock:
+            selected = await asyncio.to_thread(
+                self._select_extraction_candidates_sync, chunks
+            )
+        print(
+            f"[AI] criterion extraction {request.job_id}: "
+            f"selected {len(selected)} candidate chunk(s).",
+            flush=True,
+        )
+
         pointer_candidates: list[_PointerCandidate] = []
         for number, chunk in enumerate(selected, start=1):
             candidate = self._candidate(chunk, f"E{number}")
@@ -239,8 +284,20 @@ class QwenAIAdapter:
         proposals: list[CriterionProposalCandidate] = []
         seen_passages: set[tuple[UUID, int, str]] = set()
         batch_size = 4
+        total_batches = (
+            (len(pointer_candidates) + batch_size - 1) // batch_size
+            if pointer_candidates
+            else 0
+        )
         for offset in range(0, len(pointer_candidates), batch_size):
             batch = pointer_candidates[offset : offset + batch_size]
+            batch_no = offset // batch_size + 1
+            print(
+                f"[AI] criterion extraction {request.job_id}: "
+                f"OpenRouter batch {batch_no}/{total_batches} "
+                f"({len(batch)} candidate(s))...",
+                flush=True,
+            )
             candidate_map = {item.candidate_id: item for item in batch}
             user_prompt = (
                 f"contractVersion={self._contract_version}\n"
@@ -283,6 +340,11 @@ class QwenAIAdapter:
                         source_anchors=(anchor,),
                     )
                 )
+        print(
+            f"[AI] criterion extraction {request.job_id}: "
+            f"finished with {len(proposals)} proposal(s).",
+            flush=True,
+        )
         return proposals
 
     @staticmethod
@@ -377,7 +439,9 @@ class QwenAIAdapter:
             else:
                 category_by_document[document.document_id] = "document"
 
-        chunks = chunk_documents(parsed, category_by_document=category_by_document)
+        chunks = await asyncio.to_thread(
+            chunk_documents, parsed, category_by_document=category_by_document
+        )
         if not chunks:
             return [
                 ValidationCandidate(
@@ -390,11 +454,10 @@ class QwenAIAdapter:
                 for criterion in request.criteria
             ]
 
-        index = ChunkIndex(chunks, self._dense_embedder())
-        evidence_by_criterion = {
-            criterion.id: self._evidence_for_criterion(index, criterion, number=number)
-            for number, criterion in enumerate(request.criteria, start=1)
-        }
+        async with self._retrieval_lock:
+            evidence_by_criterion = await asyncio.to_thread(
+                self._analysis_evidence_sync, chunks, request.criteria
+            )
         allowed_ids = {item.metadata.id for item in request.allowed_documents}
         criterion_by_id = {criterion.id: criterion for criterion in request.criteria}
         results: dict[UUID, ValidationCandidate] = {}

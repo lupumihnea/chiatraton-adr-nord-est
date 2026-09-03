@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -9,6 +10,8 @@ from uuid import uuid4
 from nicegui import events, ui
 
 from Interface.api_client import (
+    APIUnavailableError,
+    APITimeoutError,
     IdempotencyKeyManager,
     api_client,
     api_error_message,
@@ -309,20 +312,46 @@ def upload_documents_page(project_id: str) -> None:
                         extraction_key = key_manager.key_for(
                             extraction_operation, extraction_fingerprint
                         )
-                        try:
-                            job = await api_client.create_criterion_extraction_job(
-                                project_id,
-                                document_ids=uploaded_document_ids,
-                                idempotency_key=extraction_key,
-                            )
-                        except Exception as error:
+                        job = None
+                        last_error: Exception | None = None
+                        # A lost/late response is ambiguous: the server may
+                        # already have accepted the job. Retry with the SAME
+                        # idempotency key instead of creating duplicates.
+                        for attempt in range(3):
+                            try:
+                                job = await api_client.create_criterion_extraction_job(
+                                    project_id,
+                                    document_ids=uploaded_document_ids,
+                                    idempotency_key=extraction_key,
+                                )
+                                break
+                            except (APITimeoutError, APIUnavailableError) as error:
+                                last_error = error
+                                if attempt < 2:
+                                    ui.notify(
+                                        "API-ul este ocupat cu inițializarea AI; "
+                                        f"reîncercăm pornirea extracției ({attempt + 2}/3)...",
+                                        type="warning",
+                                        timeout=5000,
+                                    )
+                                    await asyncio.sleep(2.0 * (attempt + 1))
+                                    continue
+                                break
+                            except Exception as error:
+                                last_error = error
+                                break
+
+                        if job is None:
                             ui.notify(
-                                "Documentele sunt încărcate, dar extragerea nu a putut porni: "
-                                + api_error_message(error),
+                                "Documentele sunt încărcate. Nu am primit confirmarea "
+                                "job-ului de extracție după 3 încercări. "
+                                + (api_error_message(last_error) if last_error else ""),
                                 type="negative",
-                                timeout=10000,
+                                timeout=15000,
                             )
-                            ui.navigate.to(f"/project/{project_id}")
+                            # Stay on the upload page: navigating immediately to
+                            # /project while the backend is CPU-busy used to
+                            # trigger NiceGUI's 3-second page-build timeout.
                             return
 
                         key_manager.mark_succeeded(

@@ -6,7 +6,7 @@ from typing import Literal
 from pydantic import AliasChoices, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEVELOPMENT_JWT_SECRET = "development-only-secret-change-me"
+DEVELOPMENT_JWT_SECRET = "development-only-secret-change-me-please-rotate"
 
 
 class Settings(BaseSettings):

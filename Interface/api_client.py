@@ -55,6 +55,10 @@ class APIUnavailableError(APIClientError):
     """The API could not be reached."""
 
 
+class APITimeoutError(APIClientError):
+    """The API was reachable but did not answer before the client timeout."""
+
+
 class APIProblemError(APIClientError):
     """An API request returned a ProblemDetails response."""
 
@@ -168,6 +172,11 @@ class ChIAtratonAPIClient:
         headers = {**self._authorization_headers(), **kwargs.pop("headers", {})}
         try:
             response = await self._client.request(method, path, headers=headers, **kwargs)
+        except httpx.TimeoutException as exc:
+            raise APITimeoutError(
+                f"API-ul de la {self.base_url} este disponibil, dar răspunsul a depășit "
+                "timpul de așteptare. Operația AI continuă în fundal dacă job-ul a fost creat."
+            ) from exc
         except httpx.RequestError as exc:
             raise APIUnavailableError(
                 f"API-ul nu este disponibil la {self.base_url}."
@@ -262,6 +271,11 @@ class ChIAtratonAPIClient:
             f"/api/v1/projects/{project_id}/criterion-extraction-jobs",
             json={"documentIds": document_ids},
             headers={"Idempotency-Key": idempotency_key},
+            # Job creation should normally return immediately with HTTP 202,
+            # but the local demo process can be briefly busy while the first
+            # embedding model is initialized. Keep this POST tolerant; the
+            # Idempotency-Key makes retries safe.
+            timeout=180.0,
         )
         result = response.json()
         if not isinstance(result, dict):

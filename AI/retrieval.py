@@ -106,6 +106,17 @@ class MultilingualDenseRetriever:
         self.model_name = model_name or os.getenv(
             "LOCAL_EMBEDDING_MODEL", "intfloat/multilingual-e5-small"
         )
+        # Keep the embedding worker from monopolising every CPU core in the
+        # same process as FastAPI. This improves API responsiveness during the
+        # first extraction on Windows laptops.
+        try:
+            import torch
+            torch.set_num_threads(
+                max(1, int(os.getenv("LOCAL_EMBEDDING_THREADS", "4")))
+            )
+        except (ImportError, RuntimeError, ValueError):
+            pass
+
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as exc:  # pragma: no cover - optional AI extra

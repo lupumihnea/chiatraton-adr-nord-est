@@ -308,42 +308,62 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                                     on_click=lambda p=proposal: reject_dialog(p),
                                 ).props("flat color=negative no-caps")
 
-        # Poll the background extraction job.  The job is intentionally separate
-        # from upload because the API contract models extraction as an auditable job.
-        job: dict[str, Any] | None = None
-        try:
-            for _ in range(180):  # up to ~6 minutes for local parsing + paid OpenRouter calls
-                job = await api_client.get_analysis_job(job_id)
-                status = str(job.get("status", ""))
-                if status in TERMINAL_JOB_STATUSES:
-                    break
-                status_label.text = f"Extragere în curs: {status}..."
-                await asyncio.sleep(2)
-        except Exception as error:
+        async def poll_job_after_connect() -> None:
+            """Poll after the initial page has already been sent to the browser."""
+
+            job: dict[str, Any] | None = None
+            try:
+                for _ in range(180):  # up to ~6 minutes
+                    job = await api_client.get_analysis_job(job_id)
+                    status = str(job.get("status", ""))
+                    if status in TERMINAL_JOB_STATUSES:
+                        break
+                    status_label.text = f"Extragere în curs: {status}..."
+                    await asyncio.sleep(2)
+            except Exception as error:
+                spinner.set_visibility(False)
+                status_label.text = "Nu am putut citi starea extracției."
+                ui.notify(api_error_message(error), type="negative", timeout=10000)
+                return
+
+            if job is None or str(job.get("status")) not in TERMINAL_JOB_STATUSES:
+                spinner.set_visibility(False)
+                status_label.text = (
+                    "Extragerea durează mai mult decât intervalul de așteptare."
+                )
+                ui.button(
+                    "Reîncarcă pagina",
+                    on_click=lambda: ui.navigate.to(
+                        f"/project/{project_id}/criteria-review/{job_id}"
+                    ),
+                ).props("no-caps")
+                return
+
             spinner.set_visibility(False)
-            status_label.text = "Nu am putut citi starea extracției."
-            ui.notify(api_error_message(error), type="negative", timeout=10000)
-            return
+            status = str(job.get("status"))
+            if status != "succeeded":
+                error = job.get("error") or {}
+                status_label.text = (
+                    "Extragerea a eșuat: "
+                    + _clean(error.get("message") or status)
+                )
+                status_label.classes(replace="font-bold text-red-700")
+                return
 
-        if job is None or str(job.get("status")) not in TERMINAL_JOB_STATUSES:
-            spinner.set_visibility(False)
-            status_label.text = "Extragerea durează mai mult decât intervalul de așteptare."
-            ui.button("Reîncarcă pagina", on_click=lambda: ui.navigate.to(
-                f"/project/{project_id}/criteria-review/{job_id}"
-            )).props("no-caps")
-            return
+            status_label.text = (
+                f"Extragere finalizată · {job.get('proposalCount', 0)} propuneri găsite"
+            )
+            status_label.classes(replace="font-bold text-green-700")
+            await criteria_view()
+            await proposals_view()
 
-        spinner.set_visibility(False)
-        status = str(job.get("status"))
-        if status != "succeeded":
-            error = job.get("error") or {}
-            status_label.text = f"Extragerea a eșuat: {_clean(error.get('message') or status)}"
-            status_label.classes(replace="font-bold text-red-700")
-            return
-
-        status_label.text = (
-            f"Extragere finalizată · {job.get('proposalCount', 0)} propuneri găsite"
-        )
-        status_label.classes(replace="font-bold text-green-700")
-        await criteria_view()
-        await proposals_view()
+        # This is the NiceGUI-supported pattern for long-running page setup:
+        # everything built above is sent immediately as the initial HTTP response;
+        # only after the browser/websocket is connected do we start polling.
+        #
+        # Using ui.timer here looked asynchronous, but on some NiceGUI versions
+        # the timer could still participate in page setup and hit the default
+        # 3-second response_timeout. Explicitly awaiting connected() is the
+        # documented lifecycle boundary.
+        await ui.context.client.connected(timeout=10.0)
+        await poll_job_after_connect()

@@ -31,7 +31,7 @@ app.on_shutdown(api_client.close)
 
 @ui.page("/")
 async def home() -> None:
-    """Render Andrei's landing page and populate it from the HTTP API."""
+    """Render immediately; load projects only after the browser is connected."""
 
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
@@ -91,24 +91,29 @@ async def home() -> None:
         )
         ui.space()
 
-        try:
-            projects = await api_client.list_all_projects()
-        except Exception as error:
-            ui.notify(
-                api_error_message(error),
-                type="negative",
-                position="top",
-                timeout=8000,
-            )
-        else:
-            project_select.options = {
-                str(project["id"]): f'{project["name"]} — {project["id"]}'
-                for project in projects
-                if project.get("id") and project.get("name")
-            }
-            project_select.update()
-        finally:
-            loading.set_visibility(False)
+        async def load_projects_after_connect() -> None:
+            try:
+                projects = await api_client.list_all_projects()
+            except Exception as error:
+                ui.notify(
+                    api_error_message(error),
+                    type="negative",
+                    position="top",
+                    timeout=8000,
+                )
+            else:
+                project_select.options = {
+                    str(project["id"]): f'{project["name"]} — {project["id"]}'
+                    for project in projects
+                    if project.get("id") and project.get("name")
+                }
+                project_select.update()
+            finally:
+                loading.set_visibility(False)
+
+        # Send the visible page first, then load projects over the websocket.
+        await ui.context.client.connected(timeout=10.0)
+        await load_projects_after_connect()
 
 
 if __name__ in {"__main__", "__mp_main__"}:

@@ -18,7 +18,11 @@ class LocalJobRunner:
             return
 
         async def execute() -> None:
-            await asyncio.sleep(0)
+            # Important for the in-process demo runner: let the request which
+            # created the job finish and send its HTTP 202 response before the
+            # CPU-heavy parser/embedding work begins. A zero-length yield can
+            # still schedule the job before ASGI has flushed the response.
+            await asyncio.sleep(0.75)
             await work()
 
         task = asyncio.create_task(execute(), name=f"chiatraton-job-{job_id}")

@@ -1,4 +1,9 @@
-"""Project details using Andrei's supplied 3/4 + 1/4 layout."""
+"""Project details using Andrei's supplied 3/4 + 1/4 layout.
+
+The page shell is rendered immediately. API reads happen only after the
+NiceGUI browser connection exists, so a busy AI backend cannot trigger
+NiceGUI's default 3-second page-build timeout.
+"""
 
 from nicegui import ui
 
@@ -22,132 +27,159 @@ async def project_details_page(project_id: str) -> None:
         loading = ui.row().classes("items-center gap-2 text-gray-600 mt-8")
         with loading:
             ui.spinner(size="lg")
-            ui.label("Se încarcă proiectul...")
+            loading_label = ui.label("Se încarcă proiectul...")
 
-        try:
-            project = await api_client.get_project(project_id)
-        except Exception as error:
-            ui.notify(
-                api_error_message(error),
-                type="negative",
-                position="top",
-                timeout=8000,
-            )
-            project = None
-        finally:
-            loading.set_visibility(False)
+        content = ui.column().classes("w-full items-center gap-6")
 
-        if project is None:
-            with ui.column().classes(
-                "w-full max-w-6xl items-center bg-white shadow-xl "
-                "rounded-[1.5rem] p-8"
-            ):
-                ui.icon("search_off", size="xl").classes("text-gray-400")
-                ui.label("Proiectul nu a fost găsit.").classes(
-                    "text-xl font-bold text-gray-700"
-                )
-            return
-
-        with ui.row().classes(
-            "w-full max-w-6xl px-4 gap-6 flex-nowrap items-stretch"
-        ):
-            with ui.column().classes(
-                "w-3/4 bg-white shadow-xl rounded-[1.5rem] p-6 "
-                "border border-yellow-100"
-            ):
-                with ui.row().classes("items-center mb-2 gap-2"):
-                    ui.icon("info", size="sm").classes("text-yellow-600")
-                    ui.label("Detalii Proiect").classes(
-                        "text-2xl font-extrabold text-gray-800"
+        async def load_after_connect() -> None:
+            try:
+                project = await api_client.get_project(project_id)
+            except Exception as error:
+                loading.set_visibility(False)
+                with content:
+                    ui.label(api_error_message(error)).classes(
+                        "text-red-700 font-bold"
                     )
+                    ui.button(
+                        "Reîncearcă",
+                        on_click=lambda: ui.navigate.to(f"/project/{project_id}"),
+                    ).props("no-caps")
+                return
 
-                ui.separator().classes("mb-4 opacity-50")
+            if project is None:
+                loading.set_visibility(False)
+                with content:
+                    with ui.column().classes(
+                        "w-full max-w-6xl items-center bg-white shadow-xl "
+                        "rounded-[1.5rem] p-8"
+                    ):
+                        ui.icon("search_off", size="xl").classes("text-gray-400")
+                        ui.label("Proiectul nu a fost găsit.").classes(
+                            "text-xl font-bold text-gray-700"
+                        )
+                return
 
-                details = (
-                    ("Project ID", project["id"]),
-                    ("Data finalizării", project["completionDate"]),
-                    ("Nume Proiect", project["name"]),
-                    ("Sfârșitul monitorizării", project["monitoringEndDate"]),
-                )
-                with ui.grid(columns=2).classes("w-full gap-4"):
-                    for label, value in details:
-                        with ui.column().classes("space-y-1"):
-                            ui.label(label).classes(
-                                "text-xs font-extrabold text-gray-500 uppercase "
-                                "tracking-wide"
-                            )
-                            ui.label(str(value)).classes(
-                                "text-base font-bold text-gray-800 bg-gray-50 px-3 "
-                                "py-1 rounded-xl border border-gray-100 w-full break-all"
-                            )
-
-            with ui.column().classes(
-                "w-1/4 items-center justify-center bg-yellow-50 shadow-xl "
-                "rounded-[1.5rem] p-6 border-2 border-yellow-200 transition-all "
-                "hover:bg-yellow-100/80"
-            ):
-                ui.icon("cloud_upload", size="50px").classes(
-                    "text-yellow-600 mb-4"
-                )
-                ui.button(
-                    "Încarcă Documente",
-                    icon="upload_file",
-                    on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
-                ).props("push rounded size=md color=primary").classes(
-                    "px-4 py-2 text-sm font-extrabold shadow-lg hover:scale-105 "
-                    "transition-transform duration-200 text-gray-900 w-full"
-                )
-
-        with ui.column().classes(
-            "w-full max-w-6xl mt-6 bg-white shadow-xl rounded-[1.5rem] p-6 "
-            "border border-yellow-100"
-        ):
-            with ui.row().classes("w-full items-center justify-between gap-3"):
-                with ui.row().classes("items-center gap-2"):
-                    ui.icon("fact_check", size="sm").classes("text-yellow-600")
-                    ui.label("Obligații / criterii active").classes(
-                        "text-2xl font-extrabold text-gray-800"
-                    )
-                ui.button(
-                    "Încarcă documente și extrage din nou",
-                    icon="document_scanner",
-                    on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
-                ).props("outline rounded no-caps")
-
-            ui.separator().classes("my-3 opacity-50")
+            loading_label.text = "Se încarcă obligațiile..."
             try:
                 criteria = await api_client.list_all_project_criteria(project_id)
             except Exception as error:
-                ui.label(api_error_message(error)).classes("text-red-700")
                 criteria = []
-
-            if not criteria:
-                ui.label(
-                    "Nu există încă obligații confirmate. După upload, extragerea AI pornește "
-                    "automat și vei fi dus la pagina unde confirmi/corectezi/respingi propunerile."
-                ).classes("text-gray-600")
+                criteria_error = api_error_message(error)
             else:
-                ui.label(f"{len(criteria)} obligații confirmate").classes(
-                    "font-bold text-green-700 mb-2"
-                )
-                for criterion in criteria:
-                    with ui.card().classes(
-                        "w-full shadow-sm rounded-xl border border-green-100"
-                    ):
-                        ui.label(str(criterion.get("code", ""))).classes(
-                            "font-extrabold text-green-800"
-                        )
-                        ui.label(
-                            " ".join(str(criterion.get("description", "")).split())
-                        ).classes("text-gray-800")
-                        deadline = criterion.get("deadline") or "Fără termen explicit"
-                        ui.label(f"Termen: {deadline}").classes("text-sm text-gray-600")
-                        for anchor in criterion.get("sourceAnchors") or []:
-                            with ui.expansion(
-                                f"Sursă · pagina {anchor.get('pageNumber', '?')}",
-                                icon="article",
-                            ).classes("w-full"):
-                                ui.label(
-                                    " ".join(str(anchor.get("passage", "")).split())
-                                ).classes("whitespace-normal")
+                criteria_error = None
 
+            loading.set_visibility(False)
+            content.clear()
+
+            with content:
+                with ui.row().classes(
+                    "w-full max-w-6xl px-4 gap-6 flex-nowrap items-stretch"
+                ):
+                    with ui.column().classes(
+                        "w-3/4 bg-white shadow-xl rounded-[1.5rem] p-6 "
+                        "border border-yellow-100"
+                    ):
+                        with ui.row().classes("items-center mb-2 gap-2"):
+                            ui.icon("info", size="sm").classes("text-yellow-600")
+                            ui.label("Detalii Proiect").classes(
+                                "text-2xl font-extrabold text-gray-800"
+                            )
+
+                        ui.separator().classes("mb-4 opacity-50")
+
+                        details = (
+                            ("Project ID", project["id"]),
+                            ("Data finalizării", project["completionDate"]),
+                            ("Nume Proiect", project["name"]),
+                            ("Sfârșitul monitorizării", project["monitoringEndDate"]),
+                        )
+                        with ui.grid(columns=2).classes("w-full gap-4"):
+                            for label, value in details:
+                                with ui.column().classes("space-y-1"):
+                                    ui.label(label).classes(
+                                        "text-xs font-extrabold text-gray-500 uppercase "
+                                        "tracking-wide"
+                                    )
+                                    ui.label(str(value)).classes(
+                                        "text-base font-bold text-gray-800 bg-gray-50 px-3 "
+                                        "py-1 rounded-xl border border-gray-100 w-full break-all"
+                                    )
+
+                    with ui.column().classes(
+                        "w-1/4 items-center justify-center bg-yellow-50 shadow-xl "
+                        "rounded-[1.5rem] p-6 border-2 border-yellow-200 transition-all "
+                        "hover:bg-yellow-100/80"
+                    ):
+                        ui.icon("cloud_upload", size="50px").classes(
+                            "text-yellow-600 mb-4"
+                        )
+                        ui.button(
+                            "Încarcă Documente",
+                            icon="upload_file",
+                            on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
+                        ).props("push rounded size=md color=primary").classes(
+                            "px-4 py-2 text-sm font-extrabold shadow-lg hover:scale-105 "
+                            "transition-transform duration-200 text-gray-900 w-full"
+                        )
+
+                with ui.column().classes(
+                    "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
+                    "border border-yellow-100"
+                ):
+                    with ui.row().classes("w-full items-center justify-between gap-3"):
+                        with ui.row().classes("items-center gap-2"):
+                            ui.icon("fact_check", size="sm").classes("text-yellow-600")
+                            ui.label("Obligații / criterii active").classes(
+                                "text-2xl font-extrabold text-gray-800"
+                            )
+                        ui.button(
+                            "Încarcă documente și extrage din nou",
+                            icon="document_scanner",
+                            on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
+                        ).props("outline rounded no-caps")
+
+                    ui.separator().classes("my-3 opacity-50")
+
+                    if criteria_error:
+                        ui.label(criteria_error).classes("text-red-700")
+
+                    if not criteria:
+                        ui.label(
+                            "Nu există încă obligații confirmate. După upload, extragerea AI "
+                            "pornește automat și vei fi dus la pagina unde confirmi/corectezi/"
+                            "respingi propunerile."
+                        ).classes("text-gray-600")
+                    else:
+                        ui.label(f"{len(criteria)} obligații confirmate").classes(
+                            "font-bold text-green-700 mb-2"
+                        )
+                        for criterion in criteria:
+                            with ui.card().classes(
+                                "w-full shadow-sm rounded-xl border border-green-100"
+                            ):
+                                ui.label(str(criterion.get("code", ""))).classes(
+                                    "font-extrabold text-green-800"
+                                )
+                                ui.label(
+                                    " ".join(str(criterion.get("description", "")).split())
+                                ).classes("text-gray-800")
+                                deadline = criterion.get("deadline") or "Fără termen explicit"
+                                ui.label(f"Termen: {deadline}").classes(
+                                    "text-sm text-gray-600"
+                                )
+                                for anchor in criterion.get("sourceAnchors") or []:
+                                    with ui.expansion(
+                                        f"Sursă · pagina {anchor.get('pageNumber', '?')}",
+                                        icon="article",
+                                    ).classes("w-full"):
+                                        ui.label(
+                                            " ".join(
+                                                str(anchor.get("passage", "")).split()
+                                            )
+                                        ).classes("whitespace-normal")
+
+        # Explicitly flush the page shell to the browser before any API request.
+        # NiceGUI treats connected() as the boundary after which long-running
+        # async work is safe and updates are delivered over the websocket.
+        await ui.context.client.connected(timeout=10.0)
+        await load_after_connect()
