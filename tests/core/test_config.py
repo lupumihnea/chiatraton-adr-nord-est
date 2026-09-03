@@ -44,6 +44,22 @@ def test_production_rejects_any_local_application_adapter():
         )
 
 
+def test_openrouter_backend_requires_api_key():
+    with pytest.raises(ValidationError, match="CHIATRATON_OPENROUTER_API_KEY"):
+        Settings(_env_file=None, criterion_extractor_backend="openrouter")
+
+
+def test_openrouter_backend_accepts_configured_api_key():
+    settings = Settings(
+        _env_file=None,
+        criterion_extractor_backend="openrouter",
+        report_analyzer_backend="openrouter",
+        openrouter_api_key="synthetic-openrouter-key",
+    )
+
+    assert settings.openrouter_api_key.get_secret_value() == "synthetic-openrouter-key"
+
+
 def test_production_accepts_only_external_adapter_configuration():
     settings = Settings(
         _env_file=None,

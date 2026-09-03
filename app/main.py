@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Iterable
 
+import httpx
 from fastapi import APIRouter, FastAPI
 
 from app.api import api_router
@@ -22,8 +23,12 @@ from app.services.fake_ai import (
 from app.services.idempotency import IdempotencyStore
 from app.services.interfaces import ApplicationService
 from app.services.job_runner import LocalJobRunner
+from app.services.openrouter_ai import OpenRouterCriterionExtractor, OpenRouterReportAnalyzer
 from app.services.ports import CriterionExtractor, ReportAnalyzer
 from app.services.storage import InMemoryDocumentStorage
+
+_LOCAL_EXTRACTOR_BACKENDS = {"fake", "openrouter"}
+_LOCAL_ANALYZER_BACKENDS = {"fake", "openrouter"}
 
 
 def _local_application_service(
@@ -32,23 +37,68 @@ def _local_application_service(
     criterion_extractor: CriterionExtractor | None,
     report_analyzer: ReportAnalyzer | None,
 ) -> DefaultApplicationService:
-    selected = {
-        settings.repository_backend,
-        settings.document_storage_backend,
-        settings.criterion_extractor_backend,
-        settings.report_analyzer_backend,
-        settings.job_runner_backend,
-    }
-    if selected != {"memory", "fake", "local"}:
-        raise ValueError("External application adapters must be injected at the composition root")
+    if settings.repository_backend != "memory":
+        raise ValueError("External repository adapters must be injected at the composition root")
+    if settings.document_storage_backend != "memory":
+        raise ValueError(
+            "External document storage adapters must be injected at the composition root"
+        )
+    if settings.criterion_extractor_backend not in _LOCAL_EXTRACTOR_BACKENDS:
+        raise ValueError(
+            "External criterion extractor adapters must be injected at the composition root"
+        )
+    if settings.report_analyzer_backend not in _LOCAL_ANALYZER_BACKENDS:
+        raise ValueError(
+            "External report analyzer adapters must be injected at the composition root"
+        )
+    if settings.job_runner_backend != "local":
+        raise ValueError("External job runner adapters must be injected at the composition root")
+
     runner = LocalJobRunner()
+    document_storage = InMemoryDocumentStorage()
+
+    openrouter_client: httpx.AsyncClient | None = None
+
+    def _openrouter_client() -> httpx.AsyncClient:
+        nonlocal openrouter_client
+        if openrouter_client is None:
+            openrouter_client = httpx.AsyncClient()
+        return openrouter_client
+
+    if criterion_extractor is None:
+        if settings.criterion_extractor_backend == "openrouter":
+            criterion_extractor = OpenRouterCriterionExtractor(
+                document_storage=document_storage,
+                api_key=settings.openrouter_api_key.get_secret_value(),
+                model=settings.openrouter_model,
+                base_url=settings.openrouter_base_url,
+                client=_openrouter_client(),
+                timeout_seconds=settings.openrouter_timeout_seconds,
+            )
+        else:
+            criterion_extractor = DeterministicFakeCriterionExtractor()
+
+    if report_analyzer is None:
+        if settings.report_analyzer_backend == "openrouter":
+            report_analyzer = OpenRouterReportAnalyzer(
+                document_storage=document_storage,
+                api_key=settings.openrouter_api_key.get_secret_value(),
+                model=settings.openrouter_model,
+                base_url=settings.openrouter_base_url,
+                client=_openrouter_client(),
+                timeout_seconds=settings.openrouter_timeout_seconds,
+            )
+        else:
+            report_analyzer = DeterministicFakeReportAnalyzer()
+
     return DefaultApplicationService(
         unit_of_work_factory=InMemoryUnitOfWorkFactory(),
-        document_storage=InMemoryDocumentStorage(),
-        criterion_extractor=criterion_extractor or DeterministicFakeCriterionExtractor(),
-        report_analyzer=report_analyzer or DeterministicFakeReportAnalyzer(),
+        document_storage=document_storage,
+        criterion_extractor=criterion_extractor,
+        report_analyzer=report_analyzer,
         job_runner=runner,
         cursor_codec=CursorCodec(settings.jwt_secret.get_secret_value()),
+        extra_shutdown_hooks=(openrouter_client.aclose,) if openrouter_client is not None else (),
     )
 
 

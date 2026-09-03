@@ -36,9 +36,14 @@ class Settings(BaseSettings):
     idempotency_max_entries: int = Field(default=10_000, ge=1, le=1_000_000)
     repository_backend: Literal["memory", "external"] = "memory"
     document_storage_backend: Literal["memory", "external"] = "memory"
-    criterion_extractor_backend: Literal["fake", "external"] = "fake"
-    report_analyzer_backend: Literal["fake", "external"] = "fake"
+    criterion_extractor_backend: Literal["fake", "openrouter", "external"] = "fake"
+    report_analyzer_backend: Literal["fake", "openrouter", "external"] = "fake"
     job_runner_backend: Literal["local", "external"] = "local"
+
+    openrouter_api_key: SecretStr = SecretStr("")
+    openrouter_model: str = "qwen/qwen3-235b-a22b-2507"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_timeout_seconds: float = Field(default=120.0, ge=1.0, le=600.0)
 
     @model_validator(mode="after")
     def reject_development_secret_in_production(self) -> Settings:
@@ -63,6 +68,16 @@ class Settings(BaseSettings):
                     "Production requires external adapters; local adapter selected by "
                     + ", ".join(invalid)
                 )
+        uses_openrouter = "openrouter" in (
+            self.criterion_extractor_backend,
+            self.report_analyzer_backend,
+        )
+        if uses_openrouter and not self.openrouter_api_key.get_secret_value().strip():
+            raise ValueError(
+                "CHIATRATON_OPENROUTER_API_KEY must be set when the openrouter "
+                "backend is selected for CHIATRATON_CRITERION_EXTRACTOR_BACKEND "
+                "or CHIATRATON_REPORT_ANALYZER_BACKEND"
+            )
         return self
 
 

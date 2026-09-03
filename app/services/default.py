@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime
 from typing import TypeVar
 from uuid import UUID, uuid4
@@ -88,6 +88,7 @@ class DefaultApplicationService:
         report_analyzer: ReportAnalyzer,
         job_runner: JobRunner,
         cursor_codec: CursorCodec,
+        extra_shutdown_hooks: Sequence[Callable[[], Awaitable[None]]] = (),
     ) -> None:
         self._uow_factory = unit_of_work_factory
         self._storage = document_storage
@@ -95,9 +96,12 @@ class DefaultApplicationService:
         self._report_analyzer = report_analyzer
         self._job_runner = job_runner
         self._cursors = cursor_codec
+        self._extra_shutdown_hooks = tuple(extra_shutdown_hooks)
 
     async def close(self) -> None:
         await self._job_runner.close()
+        for hook in self._extra_shutdown_hooks:
+            await hook()
 
     async def _owned_project(self, uow: UnitOfWork, project_id: UUID, user: CurrentUser) -> Project:
         project = await uow.projects.get(project_id)
