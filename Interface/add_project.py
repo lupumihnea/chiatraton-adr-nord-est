@@ -1,4 +1,4 @@
-"""Project-creation page backed exclusively by the HTTP API."""
+"""Project creation in Andrei's current NiceGUI design."""
 
 from uuid import uuid4
 
@@ -14,6 +14,8 @@ from Interface.api_client import (
 
 @ui.page("/add_project")
 def add_project_page() -> None:
+    """Create a Project using exactly the fields from the OpenAPI contract."""
+
     ui.colors(primary="#ffcc00", accent="#ffcc00")
     key_manager = IdempotencyKeyManager()
     operation = f"create-project:{uuid4()}"
@@ -26,23 +28,49 @@ def add_project_page() -> None:
             )
 
         with ui.column().classes(
-            "w-full max-w-3xl bg-white shadow-2xl rounded-[2rem] p-6 "
-            "gap-4 border border-yellow-100"
+            "w-full max-w-3xl bg-white shadow-2xl rounded-[2rem] p-6 gap-3 "
+            "border border-yellow-100"
         ):
-            project_name = ui.input("Nume proiect").props(
-                "rounded outlined clearable maxlength=200"
-            ).classes("w-full")
-            completion_date = ui.input("Data finalizării").props("outlined type=date").classes(
-                "w-full"
-            )
-            monitoring_end_date = ui.input("Sfârșitul monitorizării").props(
-                "outlined type=date"
-            ).classes("w-full")
+            with ui.column().classes("w-full gap-1"):
+                ui.label("Nume proiect").classes(
+                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
+                )
+                project_name = ui.input(
+                    validation={
+                        "Numele este obligatoriu": lambda value: bool(
+                            str(value or "").strip()
+                        )
+                    }
+                ).props(
+                    "rounded outlined clearable hide-bottom-space maxlength=200 "
+                    'input-class="text-lg font-bold"'
+                ).classes("w-full text-lg bg-gray-50 rounded-xl")
+
+            with ui.column().classes("w-full gap-1"):
+                ui.label("Data finalizării").classes(
+                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
+                )
+                completion_date = ui.input().props(
+                    "rounded outlined hide-bottom-space type=date"
+                ).classes("w-full text-base bg-gray-50 rounded-xl")
+
+            with ui.column().classes("w-full gap-1"):
+                ui.label("Sfârșitul monitorizării").classes(
+                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
+                )
+                monitoring_end_date = ui.input().props(
+                    "rounded outlined hide-bottom-space type=date"
+                ).classes("w-full text-base bg-gray-50 rounded-xl")
 
             ui.label(
-                "Contractul API acceptă exclusiv numele și cele două date; "
-                "codul SMIS și datele beneficiarului nu sunt trimise."
-            ).classes("text-sm text-gray-500")
+                "Formularul trimite exclusiv name, completionDate și monitoringEndDate."
+            ).classes("text-xs font-bold text-gray-500 ml-2")
+            ui.separator().classes("my-2 opacity-50")
+
+            error_label = ui.label().classes(
+                "w-full text-sm font-bold text-red-700 bg-red-50 p-3 rounded-xl"
+            )
+            error_label.set_visibility(False)
 
             loading = ui.row().classes("items-center gap-2 text-gray-600")
             with loading:
@@ -55,23 +83,27 @@ def add_project_page() -> None:
                     "Înapoi la start",
                     icon="arrow_back",
                     on_click=lambda: ui.navigate.to("/"),
-                ).props("flat rounded no-caps")
+                ).props("flat rounded no-caps text-color=grey-7 size=md").classes(
+                    "hover:bg-gray-100 px-4 py-2 rounded-full font-bold"
+                )
 
                 async def save_project() -> None:
                     name = str(project_name.value or "").strip()
                     completed = str(completion_date.value or "").strip()
                     monitored_until = str(monitoring_end_date.value or "").strip()
+                    error_label.set_visibility(False)
+
                     if not name or not completed or not monitored_until:
                         ui.notify(
                             "Completează numele și ambele date.",
-                            type="warning",
+                            type="negative",
                             position="top",
                         )
                         return
                     if monitored_until < completed:
                         ui.notify(
                             "Sfârșitul monitorizării nu poate preceda data finalizării.",
-                            type="warning",
+                            type="negative",
                             position="top",
                         )
                         return
@@ -89,16 +121,13 @@ def add_project_page() -> None:
                     try:
                         project = await api_client.create_project(payload, idempotency_key=key)
                     except Exception as error:
-                        ui.notify(
-                            api_error_message(error),
-                            type="negative",
-                            position="top",
-                            timeout=8000,
-                        )
+                        message = api_error_message(error)
+                        error_label.text = message
+                        error_label.set_visibility(True)
+                        ui.notify(message, type="negative", position="top", timeout=8000)
                     else:
                         key_manager.mark_succeeded(operation, fingerprint)
-                        ui.notify("Proiectul a fost creat.", type="positive", position="top")
-                        ui.navigate.to(f'/projects/{project["id"]}')
+                        ui.navigate.to(f'/success/{project["id"]}')
                     finally:
                         loading.set_visibility(False)
                         save_button.enable()
@@ -108,6 +137,34 @@ def add_project_page() -> None:
                     "Salvează proiectul",
                     icon="check_circle",
                     on_click=save_project,
-                ).props("push rounded color=primary").classes(
-                    "px-6 py-2 font-extrabold text-gray-900"
+                ).props("push rounded size=md color=primary").classes(
+                    "px-6 py-2 text-base font-extrabold shadow-xl hover:scale-105 "
+                    "transition-transform duration-200 text-gray-900"
                 )
+
+
+@ui.page("/success/{project_id}")
+def success_page(project_id: str) -> None:
+    """Show the current design's success card using the public Project UUID."""
+
+    ui.colors(primary="#ffcc00", accent="#ffcc00")
+    with ui.column().classes(
+        "w-full items-center justify-center min-h-[85vh] p-4"
+    ):
+        with ui.column().classes(
+            "items-center bg-white shadow-2xl rounded-[2rem] p-8 border "
+            "border-yellow-100 transform transition-transform hover:scale-105 "
+            "duration-300 text-center max-w-lg"
+        ):
+            ui.icon("check_circle", size="120px").classes(
+                "text-green-500 mb-6 drop-shadow-md"
+            )
+            ui.label("Gata!").classes("text-5xl font-extrabold text-gray-800 mb-4")
+            ui.label("Proiectul a fost adăugat cu succes.").classes(
+                "text-lg text-gray-600 font-medium"
+            )
+            ui.label(project_id).classes(
+                "text-sm font-extrabold text-yellow-700 bg-yellow-50 px-3 py-2 "
+                "rounded-xl shadow-inner border border-yellow-200 mt-3 break-all"
+            )
+            ui.timer(2.5, lambda: ui.navigate.to(f"/projects/{project_id}"), once=True)
