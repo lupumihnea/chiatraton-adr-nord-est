@@ -7,9 +7,10 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from nicegui import events, ui
+from nicegui import app, events, ui
 
 from Interface.api_client import (
+    APIProblemError,
     APITimeoutError,
     APIUnavailableError,
     IdempotencyKeyManager,
@@ -250,6 +251,49 @@ async def upload_documents_page(project_id: str) -> None:
                                     display_name=display_name,
                                     idempotency_key=idempotency_key,
                                 )
+                            except APIProblemError as error:
+                                if error.problem.code == "document_duplicate":
+                                    # Same file (identical content) already exists in
+                                    # this project. Not a fatal error: skip it and keep
+                                    # going with the rest of the batch, since re-running
+                                    # extraction on an unchanged document is a common,
+                                    # intentional thing to try (e.g. re-testing).
+                                    row_data["completed"] = True
+                                    status_label = row_data["status_label"]
+                                    if status_label is not None:
+                                        status_label.text = "Deja încărcat"
+                                        status_label.classes(
+                                            replace=(
+                                                "text-xs font-bold text-yellow-700 "
+                                                "uppercase tracking-wide"
+                                            )
+                                        )
+                                    ui.notify(
+                                        f"„{filename}” este deja încărcat în acest "
+                                        "proiect; se sare peste el.",
+                                        type="info",
+                                        position="top",
+                                    )
+                                    continue
+                                message = api_error_message(error)
+                                error_label.text = message
+                                error_label.set_visibility(True)
+                                status_label = row_data["status_label"]
+                                if status_label is not None:
+                                    status_label.text = "Eroare"
+                                    status_label.classes(
+                                        replace=(
+                                            "text-xs font-bold text-red-700 "
+                                            "uppercase tracking-wide"
+                                        )
+                                    )
+                                ui.notify(
+                                    message,
+                                    type="negative",
+                                    position="top",
+                                    timeout=8000,
+                                )
+                                break
                             except Exception as error:
                                 message = api_error_message(error)
                                 error_label.text = message
@@ -289,21 +333,25 @@ async def upload_documents_page(project_id: str) -> None:
                         submit_button.enable()
                         back_button.enable()
 
-                    if uploaded == len(pending):
+                    all_rows_settled = all(row["completed"] for row in pending)
+                    if all_rows_settled:
+                        if not uploaded_document_ids:
+                            ui.notify(
+                                "Toate documentele selectate erau deja încărcate în acest "
+                                "proiect — nu e nimic nou de extras. Încarcă un document "
+                                "diferit, sau vezi criteriile deja existente pe pagina "
+                                "proiectului.",
+                                type="warning",
+                                position="top",
+                                timeout=10000,
+                            )
+                            return
                         ui.notify(
-                            f"{uploaded} document(e) au fost încărcate. "
+                            f"{uploaded} document(e) nou(i) au fost încărcate. "
                             "Pornim extragerea obligațiilor...",
                             type="positive",
                             position="top",
                         )
-                        if not uploaded_document_ids:
-                            ui.notify(
-                                "Documentele au fost încărcate, dar API-ul nu a returnat "
-                                "ID-urile lor.",
-                                type="negative",
-                            )
-                            ui.navigate.to(f"/project/{project_id}")
-                            return
 
                         extraction_payload = {
                             "projectId": project_id,
@@ -367,6 +415,9 @@ async def upload_documents_page(project_id: str) -> None:
                             )
                             ui.navigate.to(f"/project/{project_id}")
                             return
+                        pending_jobs = getattr(app, "pending_extraction_jobs", {})
+                        pending_jobs[project_id] = job_id
+                        app.pending_extraction_jobs = pending_jobs
                         ui.navigate.to(
                             f"/project/{project_id}/criteria-review/{job_id}"
                         )

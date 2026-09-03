@@ -6,7 +6,7 @@ import asyncio
 from datetime import date
 from typing import Any
 
-from nicegui import ui
+from nicegui import app, ui
 
 from Interface.api_client import (
     IdempotencyKeyManager,
@@ -208,6 +208,11 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 ui.label(
                     f"Propuneri AI: {len(proposals)} · de verificat: {len(unreviewed)}"
                 ).classes("text-xl font-extrabold text-gray-800")
+
+                if not unreviewed:
+                    pending_jobs = getattr(app, "pending_extraction_jobs", {})
+                    if pending_jobs.pop(project_id, None) is not None:
+                        app.pending_extraction_jobs = pending_jobs
 
                 if not proposals:
                     ui.label(

@@ -139,11 +139,23 @@ async def project_details_page(project_id: str) -> None:
                     "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
                     "border border-yellow-100"
                 ):
-                    with ui.row().classes("items-center mb-2 gap-2"):
-                        ui.icon("folder_open", size="sm").classes("text-yellow-600")
-                        ui.label("Documente încărcate").classes(
-                            "text-2xl font-extrabold text-gray-800"
-                        )
+                    with ui.row().classes("w-full items-center justify-between gap-3 mb-2"):
+                        with ui.row().classes("items-center gap-2"):
+                            ui.icon("folder_open", size="sm").classes("text-yellow-600")
+                            ui.label("Documente încărcate").classes(
+                                "text-2xl font-extrabold text-gray-800"
+                            )
+
+                        pending_jobs = getattr(app, "pending_extraction_jobs", {})
+                        pending_job_id = pending_jobs.get(project_id)
+                        if pending_job_id:
+                            ui.button(
+                                "Vezi rezultatele extracției",
+                                icon="visibility",
+                                on_click=lambda pid=pending_job_id: ui.navigate.to(
+                                    f"/project/{project_id}/criteria-review/{pid}"
+                                ),
+                            ).props("outline rounded no-caps size=sm color=primary")
                     ui.separator().classes("mb-4 opacity-50")
                     if documents_error:
                         ui.label(documents_error).classes("text-red-700")
