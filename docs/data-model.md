@@ -8,19 +8,14 @@ Acest document descrie modelul țintă. Nu modifică schema SQLite existentă di
 erDiagram
     Project ||--o{ Document : contains
     Project ||--o{ Criterion : defines
-    Project ||--o{ AnalysisJob : starts
     Project ||--o{ Report : receives
-    Report ||--|{ ReportDocument : groups
-    Document ||--o{ ReportDocument : associated_as
+    Report ||--|| Document : uploaded_as
     Report ||--o{ CriterionValidation : has
     Criterion ||--o{ CriterionValidation : checked_in
     CriterionValidation ||--|{ SourceAnchor : supported_by
     Document ||--o{ SourceAnchor : anchors
     CriterionValidation ||--o{ UserDecision : reviewed_by
     Report ||--o{ AnalysisJob : analyzed_by
-    AnalysisJob ||--o{ CriterionProposal : produces
-    CriterionProposal ||--o| CriterionProposalReview : reviewed_as
-    CriterionProposalReview ||--o| Criterion : may_create
 ```
 
 ## 2. Entități
@@ -31,7 +26,8 @@ erDiagram
 - `name`
 - `fundingCallId`
 - `completionDate`
-- `monitoringEndDate` - data contractuală explicită, egală cu sau ulterioară `completionDate`
+- `monitoringYears` - valoarea configurabilă `X`
+- `monitoringEndDate` - implicit `completionDate + monitoringYears`
 - `status`
 - `createdAt`, `updatedAt`
 
@@ -65,58 +61,20 @@ Conținutul documentului nu se duplică în loguri sau metadate. `storageKey` es
 
 Un criteriu este versionat. Termenul canonic pentru contracte noi este `Criterion`; `obligation` rămâne doar denumire legacy până la o migrare separată.
 
-### CriterionProposal
-
-- `id`
-- `analysisJobId`
-- `projectId`
-- `revision`
-- `proposedCode`
-- `proposedDescription`
-- `proposedDeadline`, opțional
-- `sourceAnchorIds` - cel puțin o ancoră completă
-- `createdAt`
-
-`CriterionProposal` este rezultatul auditabil al AI-ului și nu este
-`Criterion`. O extracție nouă adaugă propuneri noi; nu șterge, nu înlocuiește
-și nu dezactivează criteriile sau propunerile existente.
-
-### CriterionProposalReview
-
-- `id`
-- `criterionProposalId`
-- `proposalRevision`
-- `action` - `accept`, `correct` sau `reject`
-- `correction`, obligatorie pentru `correct`
-- `comment`, obligatoriu pentru `correct` și `reject`
-- `createdCriterionId`, prezent numai pentru `accept` și `correct`
-- `reviewedBy`, `reviewedAt`
-
-Review-ul este decizia utilizatorului asupra propunerii, nu un rezultat AI.
-Este append-only și rămâne legat de versiunea exactă a propunerii. `accept` și
-`correct` creează un criteriu nou; `reject` nu creează criteriu.
-
 ### Report
 
 - `id`
 - `projectId`
+- `documentId`
 - `sequenceNumber`
-- `reportType` - `implementation_progress`, `final_progress` sau `durability`
+- `kind` - `implementation_progress`, `final_progress`, `durability` sau extensie controlată
 - `periodStart`, `periodEnd`
+- `submittedAt`
 - `criterionSetVersion`
-- `status` - stare internă controlată de ChIAtraton
-- `externalSystem`, `externalId`, `externalUrl`, `externalStatus`, opționale
+- `status`
 - `createdAt`, `finalizedAt`
 
-`sequenceNumber` este unic în cadrul proiectului. Raportul capturează versiunea criteriilor folosită la analiză. `externalStatus` este text opac și nu produce tranziții ale statusului intern.
-
-### ReportDocument
-
-- `reportId`
-- `documentId`
-- `role` - `main_report`, `final_document`, `attachment` sau `clarification`
-
-Asocierea este unică pentru perechea (`reportId`, `documentId`). Fiecare raport are exact un document primar: `main_report` sau `final_document`; celelalte documente sunt suport. Toate documentele asociate aparțin proiectului raportului.
+`sequenceNumber` este unic în cadrul proiectului. Raportul capturează versiunea criteriilor folosită la analiză.
 
 ### SourceAnchor
 
@@ -136,7 +94,7 @@ Asocierea este unică pentru perechea (`reportId`, `documentId`). Fiecare raport
 - `criterionId`
 - `criterionVersion`
 - `revision`
-- `aiOutcome`
+- `aiProposedOutcome`
 - `aiConfidence`, opțional și calibrat
 - `aiRationale`
 - `status`
@@ -151,12 +109,12 @@ Identitatea logică este (`reportId`, `criterionId`, `revision`). O validare nu 
 - `id`
 - `criterionValidationId`
 - `action`
-- `finalOutcome`, obligatoriu numai când acțiunea este `correct`
-- `comment`, obligatoriu pentru `correct` și `reject`
+- `finalOutcome`, când acțiunea este o corectare sau confirmare
+- `comment`, opțional
 - `decidedBy`
 - `decidedAt`
 
-Decizia aparține unei revizii precise de `CriterionValidation`. Acțiunea este `confirm`, `correct` sau `reject`. AI-ul nu poate crea `UserDecision`, iar decizia nu pornește o clarificare oficială în MyADR/MySMIS.
+Decizia aparține unei revizii precise de `CriterionValidation`. AI-ul nu poate crea `UserDecision`.
 
 ### AnalysisJob
 
@@ -164,8 +122,6 @@ Decizia aparține unei revizii precise de `CriterionValidation`. Acțiunea este 
 - `projectId`
 - `reportId`, opțional pentru extracția inițială de criterii
 - `kind` - `extract_criteria` sau `analyze_report`
-- `documentIds` - documentele selectate pentru extracție
-- `proposalCount`, relevant pentru extracție
 - `status`
 - `idempotencyKey`
 - `modelName`
@@ -183,25 +139,31 @@ Decizia aparține unei revizii precise de `CriterionValidation`. Acțiunea este 
 5. O `UserDecision` nu poate indica o validare ștearsă sau o altă revizie decât cea afișată utilizatorului.
 6. Validările și deciziile finalizate sunt append-only; corecțiile creează înregistrări noi legate de cele anterioare.
 7. Un `AnalysisJob.idempotencyKey` este unic în domeniul operației sale.
-8. Statusul intern al raportului este independent de `externalStatus`.
-9. Fiecare `CriterionProposal` are cel puțin un `SourceAnchor` complet din documentele jobului său.
-10. Un job de extracție și review-urile sale nu fac update sau delete asupra criteriilor existente.
-11. O propunere are un singur review final; replay-ul idempotent returnează același rezultat.
 
 ## 4. Păstrarea istoricului
 
 Raportul 1 și Raportul 2 au identificatori diferiți și seturi diferite de validări. Un `UPDATE` asupra validării Raportului 1 nu este mecanismul de salvare a rezultatului Raportului 2. Același principiu se aplică reanalizărilor și deciziilor corective.
 
-Același principiu append-only se aplică extracției: joburile,
-`CriterionProposal` și `CriterionProposalReview` rămân disponibile pentru audit
-după acceptare, corectare sau respingere.
-
 ## 5. Mapare legacy, fără implementare în acest branch
 
 | Implementare existentă | Concept țintă | Observație |
 |---|---|---|
-| `projects` / `ProjectDAO` | `Project` | Lipsește `monitoringEndDate` contractual explicit și istoricul rapoartelor. |
+| `projects` / `ProjectDAO` | `Project` | Lipsesc câmpurile explicite pentru `monitoringYears` și istoricul rapoartelor. |
 | `documents` / `DocumentDAO` | `Document` | Relația cu `Project` trebuie proiectată într-o migrare ulterioară. |
 | `obligations` / `ObligationDAO` | `Criterion` | Pentru contracte noi se folosește `criteria`. |
 | `references` / `ReferenceDAO` | `SourceAnchor` | Câmpurile pagină și text oferă o bază, dar constrângerile obligatorii trebuie întărite ulterior. |
-| fără echivalent | `Report`, `CriterionProposal`, `CriterionProposalReview`, `CriterionValidation`, `UserDecision`, `AnalysisJob` | Necesită design DB și migrare aprobate de responsabilul DB. |
+| fără echivalent | `Report`, `CriterionValidation`, `UserDecision`, `AnalysisJob` | Necesită design DB și migrare aprobate de responsabilul DB. |
+
+## 6. Extensie implementată în MVP
+
+Pentru integrarea efectivă, schema SQLite adaugă fără a șterge datele legacy:
+
+- `project_documents(project_id, document_id, role)` pentru izolarea documentelor per proiect;
+- `reports` pentru raportul periodic selectat în task;
+- `analysis_jobs` pentru execuții/revizii idempotente;
+- `criterion_validations` pentru rezultatul per raport + criteriu + revizie;
+- `validation_sources` pentru cele două/mai multe pasaje folosite la comparație;
+- `user_decisions` append-only;
+- `generated_outputs` pentru nota de verificare/drafturile exportate.
+
+În această implementare, `obligation` rămâne reprezentarea fizică legacy a conceptului `Criterion`, iar `references` rămâne reprezentarea fizică a sursei criteriului. UI/API folosesc terminologia de produs acolo unde nu ar rupe compatibilitatea cu prototipul existent.
