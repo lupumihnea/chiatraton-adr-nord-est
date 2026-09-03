@@ -3,6 +3,10 @@ from __future__ import annotations
 import argparse
 import json
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from API.monitoring_api import MonitoringAPI
 from DataBase.db_schema import database_path, setup_database
 

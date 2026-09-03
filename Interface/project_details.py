@@ -132,11 +132,6 @@ async def project_details_page(project_id: str) -> None:
                             ui.label("Obligații / criterii active").classes(
                                 "text-2xl font-extrabold text-gray-800"
                             )
-                        ui.button(
-                            "Încarcă documente și extrage din nou",
-                            icon="document_scanner",
-                            on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
-                        ).props("outline rounded no-caps")
 
                     ui.separator().classes("my-3 opacity-50")
 

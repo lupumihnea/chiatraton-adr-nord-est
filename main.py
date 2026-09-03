@@ -3,6 +3,9 @@ from __future__ import annotations
 import runpy
 import sys
 
+from dotenv import load_dotenv
+
+load_dotenv()
 
 RAG_COMMANDS = {"init-db", "add-project", "add-document", "extract", "list"}
 

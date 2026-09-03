@@ -1,6 +1,9 @@
 """NiceGUI entry point based directly on Andrei's supplied interface."""
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from nicegui import app, ui
 
