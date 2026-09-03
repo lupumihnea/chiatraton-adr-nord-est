@@ -261,6 +261,22 @@ class ChIAtratonAPIClient:
             raise APIClientError("API-ul a returnat un document invalid.")
         return result
 
+    async def list_project_documents(self, project_id: str) -> list[dict[str, Any]]:
+        """
+        TODO(Mihnea): Acest endpoint (GET /api/v1/projects/{projectId}/documents)
+        nu există încă în openapi.yaml. 
+        Aici se face legătura cu API-ul după ce este implementat.
+        Momentan returnează un mock.
+        """
+        # Aici ar trebui să fie:
+        # response = await self._request("GET", f"/api/v1/projects/{project_id}/documents")
+        # return response.json().get("items", [])
+        
+        return [
+            {"id": "mock-1", "filename": "raport_tehnic.pdf", "displayName": "Documente inițiale"},
+            {"id": "mock-2", "filename": "anexa_buget.xlsx", "displayName": "Alte documente"},
+        ]
+
     async def create_criterion_extraction_job(
         self,
         project_id: str,

@@ -64,7 +64,15 @@ async def project_details_page(project_id: str) -> None:
             recent.insert(0, {"id": project["id"], "smisCode": project.get("smisCode", ""), "name": project["name"]})
             app.recent_projects = recent[:5]
 
-            loading_label.text = "Se încarcă obligațiile..."
+            loading_label.text = "Se încarcă documentele și obligațiile..."
+            try:
+                documents = await api_client.list_project_documents(project_id)
+            except Exception as error:
+                documents = []
+                documents_error = api_error_message(error)
+            else:
+                documents_error = None
+
             try:
                 criteria = await api_client.list_all_project_criteria(project_id)
             except Exception as error:
@@ -131,6 +139,32 @@ async def project_details_page(project_id: str) -> None:
                     "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
                     "border border-yellow-100"
                 ):
+                    with ui.row().classes("items-center mb-2 gap-2"):
+                        ui.icon("folder_open", size="sm").classes("text-yellow-600")
+                        ui.label("Documente încărcate").classes(
+                            "text-2xl font-extrabold text-gray-800"
+                        )
+                    ui.separator().classes("mb-4 opacity-50")
+                    if documents_error:
+                        ui.label(documents_error).classes("text-red-700")
+                    elif not documents:
+                        ui.label("Niciun document încărcat în proiect momentan.").classes("text-gray-600")
+                    else:
+                        with ui.row().classes("w-full gap-4"):
+                            for doc in documents:
+                                with ui.card().classes("w-72 shadow-sm rounded-xl border border-gray-200 bg-gray-50 flex-col gap-1"):
+                                    with ui.row().classes("items-center gap-2 w-full"):
+                                        ui.icon("description", size="sm").classes("text-gray-500")
+                                        ui.label(doc.get("displayName") or doc.get("filename")).classes("font-bold text-gray-800 break-all")
+                                    if doc.get("displayName"):
+                                        ui.label(doc.get("filename")).classes("text-xs text-gray-500 break-all")
+                                    # Optional link down the road:
+                                    ui.link("Deschide", f"{api_client.base_url}/api/v1/documents/{doc.get('id')}/content", new_tab=True).classes("text-blue-600 underline text-sm mt-1")
+
+                with ui.column().classes(
+                    "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
+                    "border border-yellow-100"
+                ):
                     with ui.row().classes("w-full items-center justify-between gap-3"):
                         with ui.row().classes("items-center gap-2"):
                             ui.icon("fact_check", size="sm").classes("text-yellow-600")
@@ -172,6 +206,13 @@ async def project_details_page(project_id: str) -> None:
                                         f"Sursă · pagina {anchor.get('pageNumber', '?')}",
                                         icon="article",
                                     ).classes("w-full"):
+                                        doc_id = anchor.get("documentId")
+                                        if doc_id:
+                                            ui.link(
+                                                "Deschide documentul",
+                                                f"{api_client.base_url}/api/v1/documents/{doc_id}/content",
+                                                new_tab=True
+                                            ).classes("text-blue-600 underline text-sm mb-2 block")
                                         ui.label(
                                             " ".join(
                                                 str(anchor.get("passage", "")).split()
