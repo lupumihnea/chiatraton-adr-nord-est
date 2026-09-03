@@ -30,9 +30,9 @@ class IdempotencyHarness:
             self.executions[counter_key] += 1
             execution = self.executions[counter_key]
             if payload.get("delay"):
-            await asyncio.sleep(0.05)
-        if payload.get("force5xx"):
-            raise RuntimeError("synthetic test-only failure")
+                await asyncio.sleep(0.05)
+            if payload.get("force5xx"):
+                raise RuntimeError("synthetic test-only failure")
             response.headers["Location"] = f"/__test__/idempotency/{response_resource}/{execution}"
             return {
                 "executionCount": execution,
