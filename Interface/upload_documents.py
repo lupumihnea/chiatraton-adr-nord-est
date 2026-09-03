@@ -1,6 +1,6 @@
 """Document upload with category-aware AI behavior.
 
-The four existing UI categories stay unchanged.  Their meaning is operational:
+The four existing UI categories stay unchanged. Their meaning is operational:
 - call/initial documents can propose project obligations;
 - progress reports are analyzed against already confirmed obligations;
 - other documents are stored without automatically creating obligations.
@@ -51,6 +51,24 @@ async def _read_pdf(event: events.UploadEventArguments) -> tuple[str, bytes]:
     if len(content) > MAX_PDF_BYTES:
         raise ValueError("Fișierul PDF depășește limita de 25 MiB.")
     return filename, content
+
+
+def _selected_category(row: dict[str, Any]) -> str | None:
+    """Return the explicitly selected category, or ``None``.
+
+    There is intentionally no default category. A missing selection must stop
+    submission instead of silently routing a project document to ``altele``.
+    """
+    category_select = row.get("category_select")
+    selected = getattr(category_select, "value", None)
+    if selected in CATEGORY_OPTIONS:
+        return str(selected)
+
+    stored = row.get("category")
+    if stored in CATEGORY_OPTIONS:
+        return str(stored)
+
+    return None
 
 
 def _valid_report_period(row: dict[str, Any]) -> str | None:
@@ -109,7 +127,8 @@ def upload_documents_page(project_id: str) -> None:
             def add_upload_row() -> None:
                 row_data: dict[str, Any] = {
                     "operation": f"upload-document:{uuid4()}",
-                    "category": "altele",
+                    "category": None,
+                    "category_select": None,
                     "filename": None,
                     "content": None,
                     "status_label": None,
@@ -132,10 +151,12 @@ def upload_documents_page(project_id: str) -> None:
                         with controls:
                             category_select = ui.select(
                                 CATEGORY_OPTIONS,
-                                value="altele",
+                                value=None,
+                                label="Alege categoria documentului",
                             ).props(
                                 "outlined rounded bg-white hide-bottom-space"
-                            ).classes("w-1/3 min-w-[200px]")
+                            ).classes("w-1/3 min-w-[240px]")
+                            row_data["category_select"] = category_select
 
                             middle_container = ui.row().classes("flex-grow items-center")
 
@@ -157,8 +178,9 @@ def upload_documents_page(project_id: str) -> None:
                                     row_data["filename"] = filename
                                     row_data["content"] = content
                                     row_data["completed"] = False
+                                    # Keep the selector editable until Submit.
+                                    row_data["category"] = _selected_category(row_data)
                                     upload_component.set_visibility(False)
-                                    category_select.disable()
 
                                     with middle_container:
                                         with ui.row().classes(
@@ -238,8 +260,13 @@ def upload_documents_page(project_id: str) -> None:
                         report_period.set_visibility(False)
 
                         def category_changed(event: Any) -> None:
-                            category = str(event.value)
+                            value = event.value
+                            category = str(value) if value in CATEGORY_OPTIONS else None
                             row_data["category"] = category
+                            print(
+                                f"[UI] category changed: {category!r}",
+                                flush=True,
+                            )
                             report_period.set_visibility(
                                 category == PROGRESS_REPORT_CATEGORY
                             )
@@ -292,7 +319,19 @@ def upload_documents_page(project_id: str) -> None:
                         )
                         return
 
+                    # The UI control is the source of truth immediately before routing.
                     for row in pending:
+                        category = _selected_category(row)
+                        if category is None:
+                            filename = str(row.get("filename") or "document")
+                            ui.notify(
+                                f"Alege categoria pentru {filename} înainte de trimitere.",
+                                type="warning",
+                                position="top",
+                                timeout=8000,
+                            )
+                            return
+                        row["category"] = category
                         period_error = _valid_report_period(row)
                         if period_error:
                             ui.notify(period_error, type="warning", position="top")
@@ -308,7 +347,17 @@ def upload_documents_page(project_id: str) -> None:
                         for row_data in pending:
                             filename = str(row_data["filename"])
                             content = bytes(row_data["content"])
-                            display_name = CATEGORY_OPTIONS[str(row_data["category"])]
+                            category = _selected_category(row_data)
+                            if category is None:
+                                raise RuntimeError(
+                                    f"Categoria documentului {filename!r} nu este selectată."
+                                )
+                            row_data["category"] = category
+                            display_name = CATEGORY_OPTIONS[category]
+                            print(
+                                f"[UI] submit document: {filename!r}, category={category!r}",
+                                flush=True,
+                            )
                             fingerprint = upload_fingerprint(
                                 project_id=project_id,
                                 filename=filename,
@@ -380,7 +429,7 @@ def upload_documents_page(project_id: str) -> None:
                             and row.get("document_id")
                         ]
 
-                        # Progress reports become Report resources; they never enter
+                        # Progress reports become Report resources and never enter
                         # the obligation-extraction job.
                         created_reports: list[dict[str, Any]] = []
                         for row in report_rows:
@@ -412,9 +461,8 @@ def upload_documents_page(project_id: str) -> None:
                                 timeout=7000,
                             )
 
-                        # First priority: project-source documents propose obligations.
-                        # If reports were uploaded in the same batch, they stay in
-                        # CREATED state until the new obligations are reviewed.
+                        # Project-source documents propose obligations first. If reports
+                        # are uploaded in the same batch, they remain saved until review.
                         obligation_document_ids = [
                             str(row["document_id"]) for row in obligation_rows
                         ]
@@ -444,8 +492,7 @@ def upload_documents_page(project_id: str) -> None:
                                     if attempt < 2:
                                         ui.notify(
                                             "API-ul este ocupat cu inițializarea AI; "
-                                            f"reîncercăm pornirea extracției "
-                                            f"({attempt + 2}/3)...",
+                                            f"reîncercăm pornirea extracției ({attempt + 2}/3)...",
                                             type="warning",
                                             timeout=5000,
                                         )
@@ -487,9 +534,8 @@ def upload_documents_page(project_id: str) -> None:
                             )
                             return
 
-                        # If this submission contains only progress reports (plus
-                        # optional context-only documents), analyze them immediately
-                        # when confirmed obligations already exist.
+                        # If only progress reports were uploaded, analyze immediately
+                        # once confirmed obligations already exist.
                         if created_reports:
                             criteria = await api_client.list_all_project_criteria(project_id)
                             if not criteria:
@@ -505,8 +551,7 @@ def upload_documents_page(project_id: str) -> None:
                             if len(created_reports) > 1:
                                 ui.notify(
                                     "Rapoartele au fost salvate. Pentru a evita mai multe analize "
-                                    "Qwen simultane, pornește analiza fiecărui raport "
-                                    "din pagina proiectului.",
+                                    "Qwen simultane, pornește analiza fiecărui raport din pagina proiectului.",
                                     type="info",
                                     timeout=9000,
                                 )

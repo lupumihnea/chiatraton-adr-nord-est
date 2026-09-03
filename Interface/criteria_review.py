@@ -80,8 +80,7 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 )
                 if not criteria:
                     ui.label(
-                        "Încă nu există obligații confirmate. Confirmă cel puțin o "
-                        "propunere de mai jos."
+                        "Încă nu există obligații confirmate. Confirmă cel puțin o propunere de mai jos."
                     ).classes("text-gray-500")
                     return
                 for criterion in criteria:

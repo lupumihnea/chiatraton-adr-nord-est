@@ -493,6 +493,34 @@ class ChIAtratonAPIClient:
                 return validations
             cursor = str(next_cursor)
 
+    async def create_validation_decision(
+        self,
+        validation_id: str,
+        *,
+        validation_revision: int,
+        action: str,
+        idempotency_key: str,
+        final_outcome: str | None = None,
+        comment: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "action": action,
+            "validationRevision": validation_revision,
+        }
+        if final_outcome is not None:
+            payload["finalOutcome"] = final_outcome
+        if comment is not None:
+            payload["comment"] = comment
+        response = await self._request(
+            "POST",
+            f"/api/v1/validations/{validation_id}/decisions",
+            json=payload,
+            headers={"Idempotency-Key": idempotency_key},
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat o decizie de validare invalidă.")
+        return result
 
 
 api_client = ChIAtratonAPIClient.from_environment()

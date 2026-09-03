@@ -20,3 +20,19 @@ def test_long_running_pages_flush_before_network_work() -> None:
 
     assert "async def report_analysis_page" in report
     assert "await ui.context.client.connected(timeout=10.0)" in report
+    assert 'EXCEPTION_OUTCOMES = {' in report
+    assert '"partially_compliant"' in report
+    assert '"non_compliant"' in report
+    assert '"insufficient_evidence"' in report
+    assert '"Arată toate obligațiile"' in report
+
+
+def test_report_analysis_keeps_human_review_controls() -> None:
+    root = Path(__file__).resolve().parents[2]
+    report = (root / "Interface" / "report_analysis.py").read_text(encoding="utf-8")
+
+    assert "create_validation_decision" in report
+    assert 'action="confirm"' in report
+    assert 'action="correct"' in report
+    assert 'action="reject"' in report
+    assert '"Confirmă constatarea"' in report

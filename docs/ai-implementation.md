@@ -31,6 +31,15 @@ Nu se execută OCR în mod silențios. Paginile PDF fără text layer nu pot dev
 surse de constatări până când există o sursă text validă sau un pas OCR explicit,
 separat și auditat.
 
+## Parsing PDF și tabele
+
+Pentru PDF-uri, PyMuPDF rămâne sursa canonică locală pentru pagină/text. Pentru
+structura tabelelor se încearcă OpenDataLoader PDF (`table_method=cluster`,
+`reading_order=xycut`), cu fallback deterministic la `PyMuPDF find_tables()`.
+Secțiunile MySMIS `Tip: OPTIUNI` sunt parsate separat: numai variantele explicit
+`Selectată: Da` pot ajunge la extractor, iar alternativele `Nu`, datele izolate și
+faptele financiare istorice de evaluare sunt filtrate. Detalii în `docs/pdf-parsing.md`.
+
 ## Retrieval
 
 Retrieval-ul folosește `intfloat/multilingual-e5-small` local, per document și
@@ -78,7 +87,8 @@ $env:CHIATRATON_REPORT_ANALYZER_BACKEND="qwen"
 $env:AI_PROVIDER="qwen"
 $env:AI_MODEL_NAME="qwen/qwen3-235b-a22b-2507"
 $env:AI_BASE_URL="https://openrouter.ai/api/v1"
-$env:AI_API_KEY="CHEIA_TA_NOUA"
+$secureKey = Read-Host "OpenRouter API key" -AsSecureString
+$env:AI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
 $env:AI_TIMEOUT_SECONDS="180"
 $env:AI_CONTRACT_VERSION="1.0"
 ```

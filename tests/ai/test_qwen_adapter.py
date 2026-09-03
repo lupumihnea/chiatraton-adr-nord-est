@@ -243,3 +243,29 @@ async def test_progress_report_never_creates_obligation_proposals(monkeypatch):
 
     assert result == []
     assert llm.calls == 0
+
+
+def test_structured_anchor_uses_canonical_source_not_semantic_serialization():
+    from AI.qwen_adapter import _PointerCandidate
+    from AI.retrieval import Chunk
+    from AI.source_units import source_units
+
+    document_id = uuid4()
+    semantic = "Nume reper: Raport final | Termen: 23-07-2025"
+    exact = "Raport final\n23-07-2025"
+    chunk = Chunk(
+        document_id=document_id,
+        page_number=33,
+        start=0,
+        end=len(semantic),
+        text=semantic,
+        kind="table_row",
+        source_text=exact,
+    )
+    candidate = _PointerCandidate("E1", chunk, source_units(semantic))
+
+    anchor = QwenAIAdapter._anchor(candidate, 0, 0)
+    assert anchor.document_id == document_id
+    assert anchor.page_number == 33
+    assert anchor.passage == exact
+    assert "Nume reper:" not in anchor.passage

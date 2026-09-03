@@ -1,6 +1,6 @@
 """Project details with obligations and progress reports.
 
-Backend contract names remain Criterion/Report.  The UI deliberately presents
+Backend contract names remain Criterion/Report. The UI deliberately presents
 criteria as obligations and reports as progress against those obligations.
 """
 
@@ -209,8 +209,7 @@ async def project_details_page(project_id: str) -> None:
 
                     if not criteria:
                         ui.label(
-                            "Nu există încă obligații confirmate. Încarcă "
-                            "documentele-sursă, "
+                            "Nu există încă obligații confirmate. Încarcă documentele-sursă, "
                             "apoi confirmă/corectează/respinge propunerile AI."
                         ).classes("text-gray-600")
                     else:
@@ -233,8 +232,7 @@ async def project_details_page(project_id: str) -> None:
                                 )
                                 for anchor in criterion.get("sourceAnchors") or []:
                                     with ui.expansion(
-                                        "Sursa obligației · pagina "
-                                        f"{anchor.get('pageNumber', '?')}",
+                                        f"Sursa obligației · pagina {anchor.get('pageNumber', '?')}",
                                         icon="article",
                                     ).classes("w-full"):
                                         ui.label(
@@ -305,8 +303,7 @@ async def project_details_page(project_id: str) -> None:
                                         ).props("outline no-caps")
                                     else:
                                         ui.label(
-                                            "Analiza rulează în fundal; reîncarcă pagina "
-                                            "pentru status."
+                                            "Analiza rulează în fundal; reîncarcă pagina pentru status."
                                         ).classes("text-sm text-blue-700")
 
         await ui.context.client.connected(timeout=10.0)

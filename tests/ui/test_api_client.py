@@ -276,3 +276,45 @@ async def test_progress_report_client_uses_existing_report_contract() -> None:
         "/api/v1/reports/00000000-0000-4000-8000-000000000010/analysis-jobs",
         {"projectDocumentIds": [], "previousReportIds": []},
     )
+
+
+@pytest.mark.anyio
+async def test_validation_decision_client_uses_existing_contract() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == (
+            "/api/v1/validations/00000000-0000-4000-8000-000000000020/decisions"
+        )
+        assert request.headers["Idempotency-Key"] == "decision-key"
+        assert json.loads(await request.aread()) == {
+            "action": "correct",
+            "validationRevision": 2,
+            "finalOutcome": "compliant",
+            "comment": "Corecție sintetică verificată de utilizator.",
+        }
+        return httpx.Response(
+            201,
+            json={
+                "id": "00000000-0000-4000-8000-000000000021",
+                "action": "correct",
+            },
+        )
+
+    client = ChIAtratonAPIClient(
+        base_url="http://api.test",
+        bearer_token="synthetic-token",
+        transport=httpx.MockTransport(handler),
+    )
+    try:
+        result = await client.create_validation_decision(
+            "00000000-0000-4000-8000-000000000020",
+            validation_revision=2,
+            action="correct",
+            final_outcome="compliant",
+            comment="Corecție sintetică verificată de utilizator.",
+            idempotency_key="decision-key",
+        )
+    finally:
+        await client.close()
+
+    assert result["action"] == "correct"

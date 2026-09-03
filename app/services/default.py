@@ -61,6 +61,8 @@ from app.services.ports import (
 )
 
 MAX_DOCUMENT_BYTES = 52_428_800
+BASELINE_DOCUMENT_CATEGORIES = {"Documente legate de apel", "Documente inițiale"}
+NON_BASELINE_DOCUMENT_CATEGORIES = {"Rapoarte de progres", "Alte documente"}
 T = TypeVar("T")
 
 
@@ -518,7 +520,51 @@ class DefaultApplicationService:
                     "Invalid report state",
                     "The report already has an active analysis job.",
                 )
-            for document_id in data.project_document_ids:
+            project_document_ids = list(data.project_document_ids)
+            previous_report_ids = list(data.previous_report_ids)
+
+            # Empty lists mean "use the project context automatically". The UI
+            # historically sent []/[]; treating that as no context made report
+            # analysis compare the report against criteria descriptions alone.
+            # Keep the public API unchanged and resolve the relevant context here.
+            if not project_document_ids:
+                project_documents = await uow.documents.list_for_project(report.project_id)
+                project_reports = await uow.reports.list_for_project(report.project_id)
+                report_document_ids = {
+                    association.document_id
+                    for project_report in project_reports
+                    for association in project_report.documents
+                }
+                project_document_ids = [
+                    document.id
+                    for document in project_documents
+                    if (
+                        document.display_name in BASELINE_DOCUMENT_CATEGORIES
+                        or (
+                            document.display_name not in NON_BASELINE_DOCUMENT_CATEGORIES
+                            and document.id not in report_document_ids
+                        )
+                    )
+                ][:100]
+
+            if not previous_report_ids:
+                project_reports = await uow.reports.list_for_project(report.project_id)
+                previous = [
+                    candidate
+                    for candidate in project_reports
+                    if candidate.id != report.id and candidate.period_end < report.period_start
+                ]
+                previous.sort(
+                    key=lambda candidate: (
+                        candidate.period_end,
+                        candidate.created_at,
+                        str(candidate.id),
+                    ),
+                    reverse=True,
+                )
+                previous_report_ids = [candidate.id for candidate in previous[:20]]
+
+            for document_id in project_document_ids:
                 document = await uow.documents.get(document_id)
                 if document is None or document.project_id != report.project_id:
                     raise _problem(
@@ -527,7 +573,7 @@ class DefaultApplicationService:
                         "Request validation failed",
                         "Every selected project document must belong to the report project.",
                     )
-            for previous_report_id in data.previous_report_ids:
+            for previous_report_id in previous_report_ids:
                 previous = await uow.reports.get(previous_report_id)
                 if previous is None or previous.project_id != report.project_id:
                     raise _problem(
@@ -558,8 +604,8 @@ class DefaultApplicationService:
                 report_id=report.id,
                 status=AnalysisJobStatus.QUEUED,
                 document_ids=[],
-                project_document_ids=data.project_document_ids,
-                previous_report_ids=data.previous_report_ids,
+                project_document_ids=project_document_ids,
+                previous_report_ids=previous_report_ids,
                 criteria_snapshot_version=snapshot_version,
                 proposal_count=None,
                 created_at=_now(),

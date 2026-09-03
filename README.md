@@ -1,7 +1,7 @@
 # ChIAtraton - ADR Nord-Est
 
 ChIAtraton este un AI verification workspace pentru raportul periodic selectat. Aplicația
-organizează proiectele, documentele, obligațiile proiectului, rapoartele și dovezile, iar AI-ul
+organizează proiectele, documentele, obligațiile proiectului, rapoartele și dovezile. AI-ul
 propune obligații din documentele-sursă și evaluează progresul raportat față de obligațiile
 confirmate. Nu înlocuiește
 MyADR/MySMIS și nu execută task-uri, autorizări ori clarificări oficiale.
@@ -125,24 +125,41 @@ source-units, iar adaptorul reconstruiește local pasajul exact și pagina înai
 API-ul să creeze `CriterionProposal` sau `CriterionValidation`. Detalii în
 `docs/ai-implementation.md`.
 
-## Comportamentul AI pe categoriile existente de documente
+### Comportamentul AI pe categoriile existente
 
-Categoriile din interfață rămân neschimbate și nu necesită modificări de schemă. Intern,
-contractul API continuă să folosească numele `Criterion` / `CriterionValidation`; în UI acestea
-sunt prezentate drept **obligații** și **progres față de obligații**.
+Categoriile din UI rămân neschimbate și nu necesită modificări de schemă:
 
-| Categoria din UI | Comportament |
+| Categoria UI | Comportament AI |
 |---|---|
-| `Documente legate de apel` | AI caută obligații/reguli monitorizabile aplicabile beneficiarului/proiectului și propune obligații pentru review uman. |
-| `Documente inițiale` | AI caută angajamente specifice proiectului: indicatori, ținte, termene, milestone-uri, angajamente de punctaj etc. |
-| `Rapoarte de progres` | Nu intră în extractorul de obligații. Se creează un `Report`, apoi AI verifică progresul față de obligațiile deja confirmate și produce `CriterionValidation`. |
-| `Alte documente` | Sunt păstrate ca documente suport și nu generează automat obligații. |
+| `Documente legate de apel` | propune obligații/reguli monitorizabile aplicabile proiectului |
+| `Documente inițiale` | propune angajamente specifice proiectului: indicatori, ținte, termene, milestone-uri și angajamente de punctaj |
+| `Rapoarte de progres` | nu creează obligații; creează `Report` și verifică progresul față de obligațiile confirmate |
+| `Alte documente` | documente suport; nu generează automat obligații |
 
-Pentru `Rapoarte de progres`, UI cere numai perioada raportată (`De la` / `Până la`), câmpuri
-deja cerute de contractul `Report`. Dacă nu există încă obligații confirmate, raportul rămâne
-salvat cu status `created`; analiza poate fi pornită ulterior din pagina proiectului după review-ul
-obligațiilor. Dacă obligațiile există deja, analiza pornește automat când este încărcat un singur
-raport de progres.
+În UI, `Criterion` este prezentat drept **Obligație**, iar `CriterionValidation` drept
+progres/verificare a obligației. Contractele și schema backend rămân neschimbate.
+
+### PDF-uri și tabele
+
+Parserul local păstrează structura tabelară înainte de retrieval/LLM:
+
+1. `OpenDataLoader PDF` este încercat primul în modul implicit `auto`;
+2. dacă OpenDataLoader/Java nu este disponibil, se folosește `PyMuPDF find_tables()`;
+3. secțiunile MySMIS `Tip: OPTIUNI` sunt tratate separat și numai variantele explicit
+   `Selectată: Da` pot ajunge în pool-ul pentru extracția obligațiilor;
+4. alternativele `Selectată: Nu`, datele izolate și metricile istorice de evaluare sunt
+   filtrate înainte/după Qwen;
+5. reprezentarea semantică a unui rând (`Header: valoare | ...`) este separată de pasajul canonic: numai un substring exact recuperat din textul PyMuPDF poate deveni `SourceAnchor`;
+6. dacă un rând structurat nu poate fi mapat mecanic la textul canonic, acel rând sintetic nu ajunge la Qwen, iar pagina brută rămâne fallback;
+7. propunerile aproape identice sunt deduplicate fără pierderea `SourceAnchor`-urilor.
+
+OpenDataLoader necesită Java 11+ și este inclus în extra-ul `ai`. Configurația implicită este:
+
+```powershell
+$env:CHIATRATON_PDF_TABLE_BACKEND="auto"
+```
+
+Poți forța `opendataloader` sau `pymupdf`. Detalii în `docs/pdf-parsing.md`.
 
 ## Matrice endpoint-uri
 
@@ -170,10 +187,12 @@ de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnaly
 
 ## Reguli importante
 
-- În termenii interfeței, AI-ul propune **obligații**. Contractul intern rămâne neschimbat:
-  AI-ul creează `CriterionProposal`, nu `Criterion`; numai review-ul utilizatorului poate crea
-  obligația confirmată (`Criterion`).
+- În UI, AI-ul propune **obligații**. Intern creează `CriterionProposal`, nu `Criterion`; numai
+  review-ul utilizatorului poate crea obligația confirmată (`Criterion`).
 - Review-ul batch este atomic. `accept` și `correct` creează obligații confirmate, `reject` nu creează.
+- `Rapoarte de progres` nu intră în extractorul de obligații; ele sunt analizate prin `ReportAnalyzer`.
+- La analiza unui raport, listele goale de context sunt rezolvate automat la documentele baseline relevante și la rapoartele anterioare proiectului; nu este necesar un agent sau un contract API nou.
+- UI-ul de analiză arată implicit excepțiile acționabile (`partially_compliant`, `non_compliant`, `insufficient_evidence`) și permite afișarea tuturor obligațiilor.
 - Fiecare propunere și fiecare constatare factuală are `SourceAnchor` cu document, pagină
   și pasaj.
 - O reanalizare adaugă o nouă revizie de `CriterionValidation`; istoricul și deciziile
@@ -193,8 +212,8 @@ python -m compileall -q app tests Interface
 
 Testele validează și contractul OpenAPI 3.1, exemplele JSON, JWT, ProblemDetails,
 idempotency și întregul workflow Project → Document → CriterionProposal → Criterion →
-Report → AnalysisJob → CriterionValidation → UserDecision. În UI, acest flux este prezentat ca
-Documente-sursă → Obligații → Raport de progres → Progres față de obligații.
+Report → AnalysisJob → CriterionValidation → UserDecision. În UI, același flux este prezentat
+ca Documente-sursă → Obligații → Raport de progres → Progres față de obligații.
 
 ## Limitări și următoarele adaptoare
 
@@ -209,9 +228,10 @@ semantic multilingual E5 și apelează Qwen prin OpenRouter paid-only.
   prin porturile `CriterionExtractor` / `ReportAnalyzer`; modul fake rămâne pentru teste.
 - Un runner durabil și un `IdempotencyStore` extern trebuie injectate înainte de
   production.
-- Validarea faptului că pasajul AI există textual în document va fi realizată de fluxul
-  real de extracție a conținutului; adaptorul fake validează doar forma și apartenența
-  ancorei.
+- Adaptorul real separă reprezentarea semantică de evidența canonică și construiește
+  `SourceAnchor` numai din text local exact. Pentru reanalizări, parsing-ul documentelor
+  și embedding-urile textelor/query-urilor sunt cache-uite in-process după identitatea
+  imuabilă / hash-ul conținutului, fără schimbarea scorurilor de retrieval.
 
 ## Documentație
 
