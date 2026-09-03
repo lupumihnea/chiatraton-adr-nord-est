@@ -172,6 +172,7 @@ async def home() -> None:
 if __name__ in {"__main__", "__mp_main__"}:
     ui.run(
         title="ADR Analizator",
+        favicon=os.path.join(assets_dir, "favicon.png"),
         host=os.getenv("CHIATRATON_UI_HOST", "127.0.0.1"),
         port=int(os.getenv("CHIATRATON_UI_PORT", "8081")),
         reload=False,
