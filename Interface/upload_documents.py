@@ -37,11 +37,27 @@ async def _read_pdf(event: events.UploadEventArguments) -> tuple[str, bytes]:
 
 
 @ui.page("/upload/{project_id}")
-def upload_documents_page(project_id: str) -> None:
+async def upload_documents_page(project_id: str) -> None:
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
     upload_state: list[dict[str, Any]] = []
     key_manager = IdempotencyKeyManager()
+
+    try:
+        project = await api_client.get_project(project_id)
+    except Exception as error:
+        ui.notify(
+            api_error_message(error),
+            type="negative",
+            position="top",
+            timeout=8000,
+        )
+        project = None
+    project_label = (
+        str(project.get("smisCode"))
+        if project is not None and project.get("smisCode")
+        else project_id
+    )
 
     with ui.column().classes("w-full items-center min-h-[85vh] bg-gray-50/30 p-4"):
         with ui.row().classes("w-full max-w-4xl mb-4"):
@@ -59,7 +75,7 @@ def upload_documents_page(project_id: str) -> None:
         ):
             with ui.row().classes("items-center gap-3 mb-2"):
                 ui.icon("cloud_upload", size="md").classes("text-yellow-600")
-                ui.label(f"Încărcare documente - Proiect {project_id}").classes(
+                ui.label(f"Încărcare documente - Proiect {project_label}").classes(
                     "text-2xl font-extrabold text-gray-800 break-all"
                 )
 

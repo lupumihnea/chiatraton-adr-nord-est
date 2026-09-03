@@ -14,6 +14,44 @@ from tests.api.test_complete_workflow import (
 )
 
 
+def test_project_ui_metadata_round_trips_without_breaking_legacy_projects(
+    client, auth_headers
+):
+    response = _post(
+        client,
+        auth_headers,
+        "/api/v1/projects",
+        "project-ui-metadata",
+        expected=201,
+        json={
+            "name": "Proiect sintetic UI",
+            "smisCode": "654321",
+            "fundingCallId": 42,
+            "beneficiaryName": "Organizație Sintetică Delta",
+            "completionDate": "2030-12-31",
+            "monitoringEndDate": "2033-12-31",
+        },
+    )
+    project = response.json()
+    assert project["smisCode"] == "654321"
+    assert project["fundingCallId"] == 42
+    assert project["beneficiaryName"] == "Organizație Sintetică Delta"
+
+    listed = client.get("/api/v1/projects", headers=auth_headers)
+    assert listed.status_code == 200
+    assert listed.json()["items"] == [project]
+
+    legacy = _create_project(
+        client,
+        auth_headers,
+        "project-without-ui-metadata",
+        "Proiect sintetic compatibil",
+    )
+    assert legacy["smisCode"] is None
+    assert legacy["fundingCallId"] is None
+    assert legacy["beneficiaryName"] is None
+
+
 def test_documents_criteria_and_report_project_boundaries(client, auth_headers):
     project_a = _create_project(client, auth_headers, "project-a", "Synthetic A")
     project_b = _create_project(client, auth_headers, "project-b", "Synthetic B")

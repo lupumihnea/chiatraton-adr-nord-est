@@ -29,7 +29,9 @@ erDiagram
 
 - `id`
 - `name`
-- `fundingCallId`
+- `smisCode`, opțional - cod extern de șase cifre
+- `fundingCallId`, opțional
+- `beneficiaryName`, opțional
 - `completionDate`
 - `monitoringEndDate` - data contractuală explicită, egală cu sau ulterioară `completionDate`
 - `status`

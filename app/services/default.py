@@ -169,6 +169,9 @@ class DefaultApplicationService:
         project = Project(
             id=uuid4(),
             name=data.name,
+            smis_code=data.smis_code,
+            funding_call_id=data.funding_call_id,
+            beneficiary_name=data.beneficiary_name,
             completion_date=data.completion_date,
             monitoring_end_date=data.monitoring_end_date,
             created_at=timestamp,

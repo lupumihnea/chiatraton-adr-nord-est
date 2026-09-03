@@ -741,6 +741,25 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+        smisCode:
+          description: Codul SMIS din șase cifre, dacă proiectul provine din MySMIS/MyADR.
+          anyOf:
+            - type: string
+              pattern: '^[0-9]{6}$'
+            - type: 'null'
+        fundingCallId:
+          description: Identificatorul numeric al apelului de finanțare, dacă este disponibil.
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        beneficiaryName:
+          description: Numele beneficiarului, păstrat ca metadată de proiect.
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: 'null'
         completionDate:
           type: string
           format: date
@@ -752,7 +771,16 @@ components:
     Project:
       type: object
       additionalProperties: false
-      required: [id, name, completionDate, monitoringEndDate, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - smisCode
+        - fundingCallId
+        - beneficiaryName
+        - completionDate
+        - monitoringEndDate
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -761,6 +789,22 @@ components:
           type: string
           minLength: 1
           maxLength: 200
+        smisCode:
+          anyOf:
+            - type: string
+              pattern: '^[0-9]{6}$'
+            - type: 'null'
+        fundingCallId:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        beneficiaryName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: 'null'
         completionDate:
           type: string
           format: date

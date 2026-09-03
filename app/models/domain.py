@@ -114,6 +114,9 @@ class SourceAnchor(APIModel):
 
 class ProjectCreate(APIModel):
     name: str = Field(min_length=1, max_length=200)
+    smis_code: str | None = Field(default=None, pattern=r"^[0-9]{6}$")
+    funding_call_id: int | None = Field(default=None, ge=1)
+    beneficiary_name: str | None = Field(default=None, min_length=1, max_length=200)
     completion_date: date
     monitoring_end_date: date
 
@@ -125,6 +128,9 @@ class ProjectCreate(APIModel):
 
 
 class Project(ProjectCreate):
+    smis_code: str | None = Field(pattern=r"^[0-9]{6}$")
+    funding_call_id: int | None = Field(ge=1)
+    beneficiary_name: str | None = Field(min_length=1, max_length=200)
     id: UUID
     created_at: datetime
     updated_at: datetime

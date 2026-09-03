@@ -52,10 +52,8 @@ async def home() -> None:
             )
 
         with ui.column().classes("w-full max-w-xl items-start space-y-4"):
-            search_bar = ui.input(
-                placeholder="Introdu numele sau UUID-ul proiectului..."
-            ).props(
-                "rounded outlined clearable "
+            search_bar = ui.input(placeholder="Introdu codul SMIS...").props(
+                'rounded outlined clearable mask="######" '
                 'input-class="text-2xl font-bold text-center"'
             ).classes("w-full text-2xl bg-white shadow-xl rounded-full border-0")
             search_bar.disable()
@@ -75,10 +73,10 @@ async def home() -> None:
             ui.label("Se încarcă proiectele...")
 
         def access_project() -> None:
-            query = str(search_bar.value or "").strip()
-            if not query:
+            smis_code = str(search_bar.value or "").strip()
+            if len(smis_code) != 6 or not smis_code.isdigit():
                 ui.notify(
-                    "Introdu numele sau UUID-ul proiectului.",
+                    "Introdu un cod SMIS valid de șase cifre.",
                     type="warning",
                     position="top",
                 )
@@ -88,29 +86,14 @@ async def home() -> None:
                 (
                     str(project["id"])
                     for project in projects
-                    if str(project.get("id", "")).casefold() == query.casefold()
+                    if str(project.get("smisCode", "")) == smis_code
                 ),
                 None,
             )
-            if project_id is None:
-                name_matches = [
-                    project
-                    for project in projects
-                    if str(project.get("name", "")).casefold() == query.casefold()
-                ]
-                if len(name_matches) == 1:
-                    project_id = str(name_matches[0]["id"])
-                elif len(name_matches) > 1:
-                    ui.notify(
-                        "Există mai multe proiecte cu acest nume. Folosește UUID-ul.",
-                        type="warning",
-                        position="top",
-                    )
-                    return
 
             if project_id is None:
                 ui.notify(
-                    "Proiectul nu a fost găsit.",
+                    f"Proiectul cu codul SMIS {smis_code} nu a fost găsit.",
                     type="negative",
                     position="top",
                 )

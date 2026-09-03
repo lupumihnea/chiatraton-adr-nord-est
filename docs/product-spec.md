@@ -27,7 +27,7 @@ Pentru contractele noi se folosește `criteria`, nu `obligations`. Pentru lucrul
 
 ### 4.1 Configurarea proiectului
 
-Utilizatorul poate crea un `Project`, îi poate stabili data finalizării și `monitoringEndDate` și îi poate atașa `Document`. `monitoringEndDate` este data contractuală explicită până la care proiectul primește rapoarte și trebuie să fie egală cu sau ulterioară datei finalizării.
+Utilizatorul poate crea un `Project`, îi poate stabili data finalizării și `monitoringEndDate` și îi poate atașa `Document`. Un proiect poate păstra opțional `smisCode`, `fundingCallId` și `beneficiaryName` pentru identificare în UI și trasabilitate către sistemele externe. UUID-ul rămâne identitatea publică a resursei. `monitoringEndDate` este data contractuală explicită până la care proiectul primește rapoarte și trebuie să fie egală cu sau ulterioară datei finalizării.
 
 ### 4.2 Stabilirea criteriilor
 

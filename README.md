@@ -54,8 +54,8 @@ python -m Interface.main
 ```
 
 Interfața este disponibilă implicit la `http://127.0.0.1:8081`. Portul poate fi schimbat
-prin `CHIATRATON_UI_PORT`. UI-ul listează proiectele după nume și UUID, creează proiecte
-cu exact câmpurile contractuale și încarcă documente prin API; nu accesează direct
+prin `CHIATRATON_UI_PORT`. UI-ul caută proiectele după cod SMIS și păstrează UUID-ul
+pentru rutele API, creează proiecte cu exact câmpurile contractuale și încarcă documente prin API; nu accesează direct
 repository-uri, DAO-uri sau baza de date.
 
 Exemplu minimal:
@@ -67,6 +67,9 @@ $headers = @{
 }
 $body = @{
   name = "Synthetic monitoring project"
+  smisCode = "654321"
+  fundingCallId = 42
+  beneficiaryName = "Synthetic beneficiary"
   completionDate = "2030-12-31"
   monitoringEndDate = "2033-12-31"
 } | ConvertTo-Json

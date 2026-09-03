@@ -30,6 +30,37 @@ def add_project_page() -> None:
             "space-y-3 border border-yellow-100"
         ):
             with ui.column().classes("w-full space-y-1"):
+                ui.label("Cod SMIS (6 cifre)").classes(
+                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
+                )
+                smis_code = ui.input(
+                    validation={
+                        "Trebuie exact 6 cifre": lambda value: (
+                            len(str(value or "")) == 6
+                            and str(value or "").isdigit()
+                        )
+                    }
+                ).props(
+                    'rounded outlined clearable hide-bottom-space mask="######" '
+                    'input-class="text-lg font-bold tracking-widest"'
+                ).classes("w-full text-lg bg-gray-50 rounded-xl")
+
+            with ui.column().classes("w-full space-y-1"):
+                ui.label("Identificator al apelului (obligatoriu)").classes(
+                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
+                )
+                funding_call_id = ui.input(
+                    validation={
+                        "Trebuie să fie un număr întreg pozitiv": lambda value: (
+                            str(value or "").isdigit() and int(str(value)) > 0
+                        )
+                    }
+                ).props(
+                    "rounded outlined clearable hide-bottom-space "
+                    'input-class="text-base font-bold"'
+                ).classes("w-full text-base bg-gray-50 rounded-xl")
+
+            with ui.column().classes("w-full space-y-1"):
                 ui.label("Nume proiect (obligatoriu)").classes(
                     "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
                 )
@@ -43,6 +74,15 @@ def add_project_page() -> None:
                     "rounded outlined clearable hide-bottom-space maxlength=200 "
                     'input-class="text-lg font-bold"'
                 ).classes("w-full text-lg bg-gray-50 rounded-xl")
+
+            with ui.column().classes("w-full space-y-1"):
+                ui.label("Nume beneficiar (opțional)").classes(
+                    "text-xs font-extrabold text-gray-500 uppercase tracking-wide ml-2"
+                )
+                beneficiary_name = ui.input().props(
+                    "rounded outlined clearable hide-bottom-space maxlength=200 "
+                    'input-class="text-base font-bold"'
+                ).classes("w-full text-base bg-gray-50 rounded-xl")
 
             with ui.column().classes("w-full space-y-1"):
                 ui.label("Data finalizării (obligatoriu)").classes(
@@ -85,11 +125,30 @@ def add_project_page() -> None:
                 )
 
                 async def save_project() -> None:
+                    smis = str(smis_code.value or "").strip()
+                    funding_call = str(funding_call_id.value or "").strip()
                     name = str(project_name.value or "").strip()
+                    beneficiary = str(beneficiary_name.value or "").strip()
                     completed = str(completion_date.value or "").strip()
                     monitored_until = str(monitoring_end_date.value or "").strip()
                     error_label.set_visibility(False)
 
+                    if len(smis) != 6 or not smis.isdigit():
+                        ui.notify(
+                            "Completează un cod SMIS valid de șase cifre.",
+                            type="negative",
+                            position="top",
+                            classes="font-bold",
+                        )
+                        return
+                    if not funding_call.isdigit() or int(funding_call) < 1:
+                        ui.notify(
+                            "Completează un identificator de apel pozitiv.",
+                            type="negative",
+                            position="top",
+                            classes="font-bold",
+                        )
+                        return
                     if not name or not completed or not monitored_until:
                         ui.notify(
                             "Completează numele și ambele date.",
@@ -109,6 +168,9 @@ def add_project_page() -> None:
 
                     payload = {
                         "name": name,
+                        "smisCode": smis,
+                        "fundingCallId": int(funding_call),
+                        "beneficiaryName": beneficiary or None,
                         "completionDate": completed,
                         "monitoringEndDate": monitored_until,
                     }
@@ -134,7 +196,7 @@ def add_project_page() -> None:
                         )
                     else:
                         key_manager.mark_succeeded(operation, fingerprint)
-                        ui.navigate.to(f'/success/{project["id"]}')
+                        ui.navigate.to(f'/success/{project["id"]}/{smis}')
                     finally:
                         loading.set_visibility(False)
                         save_button.enable()
@@ -150,8 +212,8 @@ def add_project_page() -> None:
                 )
 
 
-@ui.page("/success/{project_id}")
-def success_page(project_id: str) -> None:
+@ui.page("/success/{project_id}/{smis_code}")
+def success_page(project_id: str, smis_code: str) -> None:
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
     with ui.column().classes(
@@ -168,10 +230,12 @@ def success_page(project_id: str) -> None:
             ui.label("Gata!").classes("text-5xl font-extrabold text-gray-800 mb-4")
 
             with ui.row().classes("items-center justify-center gap-1 flex-wrap"):
-                ui.label("Proiectul").classes("text-lg text-gray-600 font-medium")
-                ui.label(project_id).classes(
-                    "text-sm font-extrabold text-yellow-600 bg-yellow-50 px-3 py-1 "
-                    "rounded-xl shadow-inner border border-yellow-200 mx-1 break-all"
+                ui.label("Proiectul cu codul SMIS").classes(
+                    "text-lg text-gray-600 font-medium"
+                )
+                ui.label(smis_code).classes(
+                    "text-xl font-extrabold text-yellow-600 bg-yellow-50 px-3 py-1 "
+                    "rounded-xl shadow-inner border border-yellow-200 mx-1"
                 )
                 ui.label("a fost adăugat cu succes.").classes(
                     "text-lg text-gray-600 font-medium"

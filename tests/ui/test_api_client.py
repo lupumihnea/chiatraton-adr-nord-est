@@ -51,6 +51,9 @@ async def test_list_projects_uses_bearer_auth_and_contract_query() -> None:
 async def test_create_project_sends_exact_payload_and_idempotency_key() -> None:
     payload = {
         "name": "Proiect sintetic UI",
+        "smisCode": "654321",
+        "fundingCallId": 42,
+        "beneficiaryName": "Organizație Sintetică Delta",
         "completionDate": "2030-06-30",
         "monitoringEndDate": "2033-06-30",
     }
@@ -73,7 +76,14 @@ async def test_create_project_sends_exact_payload_and_idempotency_key() -> None:
         await client.close()
 
     assert result["id"] == "00000000-0000-4000-8000-000000000001"
-    assert set(payload) == {"name", "completionDate", "monitoringEndDate"}
+    assert set(payload) == {
+        "name",
+        "smisCode",
+        "fundingCallId",
+        "beneficiaryName",
+        "completionDate",
+        "monitoringEndDate",
+    }
 
 
 @pytest.mark.anyio

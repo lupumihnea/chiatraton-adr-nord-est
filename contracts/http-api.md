@@ -90,6 +90,9 @@ Răspunsurile de creare includ `Location` spre resursa creată.
 ### ProjectCreate
 
 - `name`: 1-200 caractere;
+- `smisCode`: opțional, exact șase cifre; identificator extern de căutare, nu ID public;
+- `fundingCallId`: opțional, număr întreg pozitiv pentru apelul de finanțare;
+- `beneficiaryName`: opțional, 1-200 caractere;
 - `completionDate`: data finalizării proiectului;
 - `monitoringEndDate`: data contractuală explicită până la care pot exista rapoarte, egală cu sau ulterioară `completionDate`.
 
@@ -97,7 +100,10 @@ API-ul nu calculează `monitoringEndDate` dintr-un număr de ani. O dată contra
 
 ### Project
 
-Adaugă `id`, `createdAt` și `updatedAt`.
+Adaugă `id`, `createdAt` și `updatedAt`. Răspunsul include întotdeauna cheile
+`smisCode`, `fundingCallId` și `beneficiaryName`; valoarea este `null` când
+metadatele nu au fost furnizate. UUID-ul `id` rămâne identitatea publică a
+resursei, iar codul SMIS este doar metadată externă.
 
 ## 8. Document
 

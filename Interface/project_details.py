@@ -64,9 +64,11 @@ async def project_details_page(project_id: str) -> None:
                 ui.separator().classes("mb-4 opacity-50")
 
                 details = (
-                    ("Project ID", project["id"]),
-                    ("Data finalizării", project["completionDate"]),
+                    ("Cod SMIS", project.get("smisCode") or "—"),
+                    ("Identificator Apel", project.get("fundingCallId") or "—"),
                     ("Nume Proiect", project["name"]),
+                    ("Nume Beneficiar", project.get("beneficiaryName") or "—"),
+                    ("Data finalizării", project["completionDate"]),
                     ("Sfârșitul monitorizării", project["monitoringEndDate"]),
                 )
                 with ui.grid(columns=2).classes("w-full gap-4"):
