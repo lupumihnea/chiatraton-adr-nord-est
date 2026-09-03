@@ -6,7 +6,7 @@ def create_database_schema(con):
     CREATE TABLE IF NOT EXISTS projects(
         id TEXT PRIMARY KEY ,
         call_id INTEGER NOT NULL,
-        name TEXT);
+        name TEXT NOT NULL);
 
     CREATE TABLE IF NOT EXISTS obligations(
         id TEXT PRIMARY KEY,
@@ -18,7 +18,7 @@ def create_database_schema(con):
     CREATE TABLE IF NOT EXISTS documents(
         id TEXT PRIMARY KEY,
         type INTEGER NOT NULL,
-        path TEXT);
+        path TEXT NOT NULL);
 
     CREATE TABLE IF NOT EXISTS referinte(
         id TEXT PRIMARY KEY,
