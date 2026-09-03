@@ -1,37 +1,113 @@
+"""Project-creation page backed exclusively by the HTTP API."""
+
+from uuid import uuid4
+
 from nicegui import ui
 
-@ui.page('/add_project')
-def add_project_page():
-    with ui.column().classes('w-full items-center mt-8 space-y-8 min-h-[75vh]'):
-        ui.label('Adaugă un nou proiect').classes('text-3xl font-bold')
+from Interface.api_client import (
+    IdempotencyKeyManager,
+    api_client,
+    api_error_message,
+    json_fingerprint,
+)
 
-        with ui.column().classes('w-full max-w-2xl space-y-4'):
-            project_code = ui.input('Codul proiectului').props('outlined').classes('w-full')
 
-            ui.label('Fișiere obligatorii').classes('text-xl font-semibold mt-4')
-            
-            with ui.row().classes('w-full items-center gap-4'):
-                ui.label('Ghid al apelului:').classes('w-1/3')
-                ui.upload(label='Încărcați Ghid al apelului (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
+@ui.page("/add_project")
+def add_project_page() -> None:
+    ui.colors(primary="#ffcc00", accent="#ffcc00")
+    key_manager = IdempotencyKeyManager()
+    operation = f"create-project:{uuid4()}"
 
-            with ui.row().classes('w-full items-center gap-4'):
-                ui.label('Contract de finanțare:').classes('w-1/3')
-                ui.upload(label='Încărcați Contract de finanțare (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
+    with ui.column().classes("w-full items-center mt-6 mb-6 min-h-[85vh]"):
+        with ui.row().classes("items-center mb-4 gap-3"):
+            ui.icon("post_add", size="md").classes("text-yellow-600")
+            ui.label("Adaugă un nou proiect").classes(
+                "text-2xl font-extrabold text-gray-800"
+            )
 
-            ui.label('Alte fișiere PDF').classes('text-xl font-semibold mt-4')
-            
-            uploads_container = ui.column().classes('w-full space-y-4')
-            
-            def add_upload():
-                with uploads_container:
-                    row = ui.row().classes('w-full items-center gap-4')
-                    with row:
-                        file_type = ui.input('Nume/Tip fișier').props('outlined').classes('w-1/3')
-                        upload = ui.upload(label='Încărcați fișier (PDF)', multiple=False, auto_upload=True).props('accept=".pdf"').classes('flex-grow')
-                        ui.button(icon='delete', on_click=lambda r=row: r.delete()).props('flat color="negative"')
+        with ui.column().classes(
+            "w-full max-w-3xl bg-white shadow-2xl rounded-[2rem] p-6 "
+            "gap-4 border border-yellow-100"
+        ):
+            project_name = ui.input("Nume proiect").props(
+                "rounded outlined clearable maxlength=200"
+            ).classes("w-full")
+            completion_date = ui.input("Data finalizării").props("outlined type=date").classes(
+                "w-full"
+            )
+            monitoring_end_date = ui.input("Sfârșitul monitorizării").props(
+                "outlined type=date"
+            ).classes("w-full")
 
-            ui.button('Adaugă fișier suplimentar', icon='add', on_click=add_upload).props('flat')
+            ui.label(
+                "Contractul API acceptă exclusiv numele și cele două date; "
+                "codul SMIS și datele beneficiarului nu sunt trimise."
+            ).classes("text-sm text-gray-500")
 
-            ui.button('Salvează Proiect', color='primary', on_click=lambda: ui.notify('Proiect salvat!')).classes('w-full mt-8')
-            
-            ui.button('Înapoi', on_click=lambda: ui.navigate.to('/')).props('flat').classes('w-full mt-2')
+            loading = ui.row().classes("items-center gap-2 text-gray-600")
+            with loading:
+                ui.spinner(size="sm")
+                ui.label("Se salvează proiectul...")
+            loading.set_visibility(False)
+
+            with ui.row().classes("w-full items-center justify-between mt-2"):
+                back_button = ui.button(
+                    "Înapoi la start",
+                    icon="arrow_back",
+                    on_click=lambda: ui.navigate.to("/"),
+                ).props("flat rounded no-caps")
+
+                async def save_project() -> None:
+                    name = str(project_name.value or "").strip()
+                    completed = str(completion_date.value or "").strip()
+                    monitored_until = str(monitoring_end_date.value or "").strip()
+                    if not name or not completed or not monitored_until:
+                        ui.notify(
+                            "Completează numele și ambele date.",
+                            type="warning",
+                            position="top",
+                        )
+                        return
+                    if monitored_until < completed:
+                        ui.notify(
+                            "Sfârșitul monitorizării nu poate preceda data finalizării.",
+                            type="warning",
+                            position="top",
+                        )
+                        return
+
+                    payload = {
+                        "name": name,
+                        "completionDate": completed,
+                        "monitoringEndDate": monitored_until,
+                    }
+                    fingerprint = json_fingerprint(payload)
+                    key = key_manager.key_for(operation, fingerprint)
+                    save_button.disable()
+                    back_button.disable()
+                    loading.set_visibility(True)
+                    try:
+                        project = await api_client.create_project(payload, idempotency_key=key)
+                    except Exception as error:
+                        ui.notify(
+                            api_error_message(error),
+                            type="negative",
+                            position="top",
+                            timeout=8000,
+                        )
+                    else:
+                        key_manager.mark_succeeded(operation, fingerprint)
+                        ui.notify("Proiectul a fost creat.", type="positive", position="top")
+                        ui.navigate.to(f'/projects/{project["id"]}')
+                    finally:
+                        loading.set_visibility(False)
+                        save_button.enable()
+                        back_button.enable()
+
+                save_button = ui.button(
+                    "Salvează proiectul",
+                    icon="check_circle",
+                    on_click=save_project,
+                ).props("push rounded color=primary").classes(
+                    "px-6 py-2 font-extrabold text-gray-900"
+                )

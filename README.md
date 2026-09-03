@@ -17,7 +17,7 @@ Este necesar Python 3.11 sau mai nou.
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-python -m pip install -e ".[test]"
+python -m pip install -e ".[test,ui]"
 Copy-Item .env.example .env
 ```
 
@@ -43,6 +43,20 @@ $token = python -m app.core.dev_token --subject synthetic-demo-user --minutes 60
 Generatorul folosește configurația din `.env`, nu afișează secretul și refuză rularea
 când `CHIATRATON_ENVIRONMENT=production`. Nu există endpoint de autentificare deoarece
 acesta nu face parte din contractul API v1.
+
+Într-un al doilea terminal, transmite tokenul către clientul UI și pornește NiceGUI:
+
+```powershell
+$token = python -m app.core.dev_token --subject synthetic-demo-user --minutes 60
+$env:CHIATRATON_API_BASE_URL = "http://127.0.0.1:8000"
+$env:CHIATRATON_UI_BEARER_TOKEN = $token
+python -m Interface.main
+```
+
+Interfața este disponibilă implicit la `http://127.0.0.1:8081`. Portul poate fi schimbat
+prin `CHIATRATON_UI_PORT`. UI-ul listează proiectele după nume și UUID, creează proiecte
+cu exact câmpurile contractuale și încarcă documente prin API; nu accesează direct
+repository-uri, DAO-uri sau baza de date.
 
 Exemplu minimal:
 
@@ -74,6 +88,9 @@ Variabilele au prefixul `CHIATRATON_`:
 | `CRITERION_EXTRACTOR_BACKEND` | `fake` | `external` |
 | `REPORT_ANALYZER_BACKEND` | `fake` | `external` |
 | `JOB_RUNNER_BACKEND` | `local` | `external` |
+| `API_BASE_URL` | `http://127.0.0.1:8000` | URL-ul API injectat la runtime |
+| `UI_BEARER_TOKEN` | token local cu durată scurtă | token injectat la runtime |
+| `UI_HOST` / `UI_PORT` | `127.0.0.1` / `8081` | configurate la deployment |
 
 Pornirea în production este refuzată dacă a rămas selectat oricare adaptor in-memory,
 fake sau local. Compoziția production trebuie să injecteze explicit `ApplicationService`
@@ -121,8 +138,8 @@ de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnaly
 
 ```powershell
 python -m pytest
-python -m ruff check app tests
-python -m compileall -q app tests
+python -m ruff check app tests Interface
+python -m compileall -q app tests Interface
 ```
 
 Testele validează și contractul OpenAPI 3.1, exemplele JSON, JWT, ProblemDetails,
