@@ -34,6 +34,11 @@ class Settings(BaseSettings):
     idempotency_backend: Literal["memory", "external"] = "memory"
     idempotency_ttl_seconds: int = Field(default=3600, ge=1, le=86_400)
     idempotency_max_entries: int = Field(default=10_000, ge=1, le=1_000_000)
+    repository_backend: Literal["memory", "external"] = "memory"
+    document_storage_backend: Literal["memory", "external"] = "memory"
+    criterion_extractor_backend: Literal["fake", "external"] = "fake"
+    report_analyzer_backend: Literal["fake", "external"] = "fake"
+    job_runner_backend: Literal["local", "external"] = "local"
 
     @model_validator(mode="after")
     def reject_development_secret_in_production(self) -> Settings:
@@ -44,6 +49,20 @@ class Settings(BaseSettings):
             raise ValueError("CHIATRATON_JWT_SECRET must be configured in production")
         if self.environment == "production" and self.idempotency_backend == "memory":
             raise ValueError("CHIATRATON_IDEMPOTENCY_BACKEND must be external in production")
+        local_adapters = {
+            "CHIATRATON_REPOSITORY_BACKEND": self.repository_backend == "memory",
+            "CHIATRATON_DOCUMENT_STORAGE_BACKEND": self.document_storage_backend == "memory",
+            "CHIATRATON_CRITERION_EXTRACTOR_BACKEND": self.criterion_extractor_backend == "fake",
+            "CHIATRATON_REPORT_ANALYZER_BACKEND": self.report_analyzer_backend == "fake",
+            "CHIATRATON_JOB_RUNNER_BACKEND": self.job_runner_backend == "local",
+        }
+        if self.environment == "production":
+            invalid = [name for name, selected in local_adapters.items() if selected]
+            if invalid:
+                raise ValueError(
+                    "Production requires external adapters; local adapter selected by "
+                    + ", ".join(invalid)
+                )
         return self
 
 
