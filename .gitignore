@@ -26,3 +26,6 @@ htmlcov/
 # Sistem de operare
 .DS_Store
 Thumbs.db
+
+# Outputuri generate din rapoarte
+exports/
