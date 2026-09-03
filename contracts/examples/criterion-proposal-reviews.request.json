@@ -1,0 +1,33 @@
+{
+  "reviews": [
+    {
+      "proposalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "proposalRevision": 1,
+      "action": "accept"
+    },
+    {
+      "proposalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "proposalRevision": 1,
+      "action": "correct",
+      "correction": {
+        "code": "CRIT-SYN-102-C",
+        "description": "Raportul periodic enumeră documentele suport relevante.",
+        "deadline": null,
+        "sourceAnchors": [
+          {
+            "documentId": "33333333-3333-4333-8333-333333333333",
+            "pageNumber": 2,
+            "passage": "Raportul periodic include lista documentelor suport utilizate."
+          }
+        ]
+      },
+      "comment": "Formularea a fost făcută mai precisă."
+    },
+    {
+      "proposalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "proposalRevision": 1,
+      "action": "reject",
+      "comment": "Pasajul nu descrie un criteriu de monitorizare distinct."
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "code": "CRIT-SYN-001",
+  "description": "Raportul trebuie să prezinte progresul pentru indicatorul sintetic selectat.",
+  "deadline": "2027-03-31",
+  "sourceAnchors": [
+    {
+      "documentId": "22222222-2222-4222-8222-222222222222",
+      "pageNumber": 4,
+      "passage": "Indicatorul sintetic se verifică la finalul fiecărei perioade de raportare."
+    }
+  ]
+}

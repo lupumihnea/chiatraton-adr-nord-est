@@ -1,0 +1,1773 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: ChIAtraton HTTP API
+  version: 1.0.0
+  summary: Contractul API pentru workspace-ul de verificare AI.
+  description: |
+    API contract-first pentru verificarea unui raport periodic selectat.
+    ChIAtraton nu înlocuiește MyADR/MySMIS și nu execută acțiuni oficiale.
+  license:
+    name: Proprietary
+    identifier: LicenseRef-Proprietary
+servers:
+  - url: /
+    description: Originea mediului în care este publicat API-ul.
+tags:
+  - name: Health
+    description: Disponibilitatea minimală și publică a serviciului.
+  - name: Projects
+    description: Proiecte și calendarul lor contractual de monitorizare.
+  - name: Documents
+    description: Documente încărcate în limitele unui proiect.
+  - name: Criteria
+    description: Criterii versionate ale proiectului.
+  - name: Criterion extraction
+    description: Extracție asincronă de propuneri și review uman auditabil.
+  - name: Reports
+    description: Rapoarte periodice și asocierile lor de documente.
+  - name: Analysis
+    description: Joburi asincrone de analiză AI.
+  - name: Validations
+    description: Propuneri AI per criteriu și decizii finale ale utilizatorului.
+security:
+  - bearerAuth: []
+paths:
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealth
+      summary: Verifică starea minimală a serviciului.
+      security: []
+      responses:
+        '200':
+          description: Serviciul răspunde.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects:
+    post:
+      tags: [Projects]
+      operationId: createProject
+      summary: Creează un proiect.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreate'
+      responses:
+        '201':
+          description: Proiect creat.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Projects]
+      operationId: listProjects
+      summary: Listează proiectele.
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagină de proiecte.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedProjects'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects/{projectId}/documents:
+    post:
+      tags: [Documents]
+      operationId: uploadProjectDocument
+      summary: Încarcă un document al proiectului.
+      description: Acceptă PDF, DOC, DOCX, XLS și XLSX, maximum 50 MiB.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/DocumentUpload'
+      responses:
+        '201':
+          description: Document încărcat.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects/{projectId}/criteria:
+    post:
+      tags: [Criteria]
+      operationId: createProjectCriterion
+      summary: Creează un criteriu al proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriterionCreate'
+      responses:
+        '201':
+          description: Criteriu creat.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Criterion'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Criteria]
+      operationId: listProjectCriteria
+      summary: Listează criteriile proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagină de criterii.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCriteria'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/projects/{projectId}/criterion-extraction-jobs:
+    post:
+      tags: [Criterion extraction]
+      operationId: createCriterionExtractionJob
+      summary: Pornește extracția asincronă a propunerilor de criterii.
+      description: |
+        AI-ul generează numai CriterionProposal. Operația nu creează Criterion și
+        nu șterge sau înlocuiește criteriile existente ale proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriterionExtractionJobCreate'
+      responses:
+        '202':
+          description: Extracția a fost acceptată în coadă.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AIUnavailable'
+
+  /api/v1/projects/{projectId}/reports:
+    post:
+      tags: [Reports]
+      operationId: createProjectReport
+      summary: Creează un raport periodic și asociază documentele sale.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreate'
+      responses:
+        '201':
+          description: Raport creat.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Reports]
+      operationId: listProjectReports
+      summary: Listează rapoartele proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagină de rapoarte.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReports'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/reports/{reportId}/analysis-jobs:
+    post:
+      tags: [Analysis]
+      operationId: createReportAnalysisJob
+      summary: Pornește analiza asincronă a raportului.
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalysisJobCreate'
+      responses:
+        '202':
+          description: Analiza a fost acceptată în coadă.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AIUnavailable'
+
+  /api/v1/analysis-jobs/{jobId}:
+    get:
+      tags: [Analysis]
+      operationId: getAnalysisJob
+      summary: Citește starea unui job de analiză.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Starea jobului.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalysisJob'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/criterion-extraction-jobs/{jobId}/proposals:
+    get:
+      tags: [Criterion extraction]
+      operationId: listCriterionExtractionProposals
+      summary: Listează propunerile produse de un job de extracție finalizat.
+      description: |
+        Returnează 409 invalid_analysis_job_kind pentru alt tip de job și
+        409 analysis_job_not_succeeded dacă extracția nu s-a încheiat cu succes.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagină de propuneri, inclusiv review-ul lor când există.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCriterionProposals'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/criterion-extraction-jobs/{jobId}/proposal-reviews:
+    post:
+      tags: [Criterion extraction]
+      operationId: createCriterionProposalReviews
+      summary: Salvează review-uri umane pentru propunerile jobului.
+      description: |
+        Batch-ul este atomic. accept și correct creează câte un Criterion nou;
+        reject păstrează propunerea și review-ul, fără să creeze Criterion.
+        Conflictele folosesc proposal_already_reviewed, stale_proposal_revision,
+        criterion_code_conflict sau idempotency_conflict.
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CriterionProposalReviewBatch'
+      responses:
+        '201':
+          description: Review-urile au fost salvate și sunt auditabile.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CriterionProposalReviewBatchResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/reports/{reportId}/validations:
+    get:
+      tags: [Validations]
+      operationId: listReportValidations
+      summary: Listează validările raportului.
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/IncludeHistory'
+      responses:
+        '200':
+          description: Pagină de validări.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedValidations'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/validations/{validationId}/decisions:
+    post:
+      tags: [Validations]
+      operationId: createValidationDecision
+      summary: Salvează decizia finală a utilizatorului.
+      description: Nu pornește un flux oficial de clarificare în MyADR/MySMIS.
+      parameters:
+        - $ref: '#/components/parameters/ValidationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserDecisionCreate'
+      responses:
+        '201':
+          description: Decizie salvată.
+          headers:
+            Location:
+              $ref: '#/components/headers/Location'
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserDecision'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Tokenul identifică utilizatorul tehnic pentru audit.
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Cheie opacă pentru replay sigur al operației POST.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ValidationId:
+      name: validationId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      description: Cursor opac returnat de pagina precedentă.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 2048
+    IncludeHistory:
+      name: includeHistory
+      in: query
+      required: false
+      description: Include toate reviziile, nu doar ultima per criteriu.
+      schema:
+        type: boolean
+        default: false
+
+  headers:
+    Location:
+      description: URI-ul resursei create.
+      schema:
+        type: string
+        format: uri-reference
+    IdempotencyReplayed:
+      description: Este true numai când răspunsul este un replay idempotent.
+      required: false
+      schema:
+        type: boolean
+    RequestId:
+      description: Identificator opac pentru corelarea tehnică a cererii.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+
+  responses:
+    Unauthorized:
+      description: Token absent sau invalid.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    NotFound:
+      description: Resursa nu există sau nu este vizibilă utilizatorului.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    Conflict:
+      description: Conflict de stare, idempotency sau unicitate.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    PayloadTooLarge:
+      description: Fișierul depășește 50 MiB.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    UnsupportedMediaType:
+      description: Tipul fișierului nu este acceptat.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    ValidationError:
+      description: Request invalid semantic sau structural.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    InternalError:
+      description: Eroare internă fără date sensibile.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    AIUnavailable:
+      description: Serviciul AI nu este disponibil pentru pornirea analizei.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+    TooManyRequests:
+      description: Limita tehnică de cereri a fost depășită.
+      headers:
+        X-Request-Id:
+          $ref: '#/components/headers/RequestId'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status, service, version]
+      properties:
+        status:
+          type: string
+          const: ok
+        service:
+          type: string
+          const: chiatraton-api
+        version:
+          type: string
+          minLength: 1
+
+    ProjectCreate:
+      type: object
+      additionalProperties: false
+      required: [name, completionDate, monitoringEndDate]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        completionDate:
+          type: string
+          format: date
+        monitoringEndDate:
+          type: string
+          format: date
+          description: Dată contractuală explicită, nu valoare calculată de API.
+
+    Project:
+      type: object
+      additionalProperties: false
+      required: [id, name, completionDate, monitoringEndDate, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        completionDate:
+          type: string
+          format: date
+        monitoringEndDate:
+          type: string
+          format: date
+          description: Dată contractuală explicită, nu valoare calculată de API.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DocumentUpload:
+      type: object
+      additionalProperties: false
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+          description: PDF, DOC, DOCX, XLS sau XLSX; maximum 50 MiB.
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    Document:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - displayName
+        - originalFilename
+        - mediaType
+        - sizeBytes
+        - sha256
+        - pageCount
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 255
+        originalFilename:
+          type: string
+          minLength: 1
+          maxLength: 255
+        mediaType:
+          $ref: '#/components/schemas/DocumentMediaType'
+        sizeBytes:
+          type: integer
+          minimum: 1
+          maximum: 52428800
+        sha256:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        pageCount:
+          type: [integer, 'null']
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+
+    DocumentMediaType:
+      type: string
+      enum:
+        - application/pdf
+        - application/msword
+        - application/vnd.openxmlformats-officedocument.wordprocessingml.document
+        - application/vnd.ms-excel
+        - application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+
+    SourceAnchor:
+      type: object
+      additionalProperties: false
+      required: [documentId, pageNumber, passage]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        pageNumber:
+          type: integer
+          minimum: 1
+        passage:
+          type: string
+          minLength: 1
+          maxLength: 8000
+
+    CriterionCreate:
+      type: object
+      additionalProperties: false
+      required: [code, description]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        deadline:
+          type: [string, 'null']
+          format: date
+        sourceAnchors:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceAnchor'
+          default: []
+          maxItems: 100
+
+    Criterion:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - code
+        - description
+        - deadline
+        - sourceAnchors
+        - version
+        - active
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        deadline:
+          type: [string, 'null']
+          format: date
+        sourceAnchors:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SourceAnchor'
+        version:
+          type: integer
+          minimum: 1
+        active:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ReportType:
+      type: string
+      enum: [implementation_progress, final_progress, durability]
+
+    ReportDocumentRole:
+      type: string
+      enum: [main_report, attachment, clarification, final_document]
+
+    ReportDocument:
+      type: object
+      additionalProperties: false
+      required: [documentId, role]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        role:
+          $ref: '#/components/schemas/ReportDocumentRole'
+
+    ExternalSystem:
+      type: string
+      enum: [myadr, mysmis, other]
+
+    ReportCreate:
+      type: object
+      additionalProperties: false
+      required: [reportType, periodStart, periodEnd, documents]
+      dependentRequired:
+        externalId: [externalSystem]
+        externalUrl: [externalSystem]
+        externalStatus: [externalSystem]
+      properties:
+        reportType:
+          $ref: '#/components/schemas/ReportType'
+        periodStart:
+          type: string
+          format: date
+        periodEnd:
+          type: string
+          format: date
+        documents:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ReportDocument'
+          contains:
+            type: object
+            required: [role]
+            properties:
+              role:
+                enum: [main_report, final_document]
+          minContains: 1
+          maxContains: 1
+        externalSystem:
+          $ref: '#/components/schemas/ExternalSystem'
+        externalId:
+          type: string
+          minLength: 1
+          maxLength: 255
+        externalUrl:
+          type: string
+          format: uri
+          pattern: '^https?://'
+          maxLength: 2048
+        externalStatus:
+          type: string
+          minLength: 1
+          maxLength: 255
+
+    ReportStatus:
+      type: string
+      enum:
+        - created
+        - analysis_queued
+        - analysis_in_progress
+        - awaiting_user_decision
+        - completed
+        - analysis_failed
+
+    Report:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - reportType
+        - periodStart
+        - periodEnd
+        - documents
+        - externalSystem
+        - externalId
+        - externalUrl
+        - externalStatus
+        - status
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        reportType:
+          $ref: '#/components/schemas/ReportType'
+        periodStart:
+          type: string
+          format: date
+        periodEnd:
+          type: string
+          format: date
+        documents:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/ReportDocument'
+          contains:
+            type: object
+            required: [role]
+            properties:
+              role:
+                enum: [main_report, final_document]
+          minContains: 1
+          maxContains: 1
+        externalSystem:
+          oneOf:
+            - $ref: '#/components/schemas/ExternalSystem'
+            - type: 'null'
+        externalId:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 255
+        externalUrl:
+          type: [string, 'null']
+          format: uri
+          pattern: '^https?://'
+          maxLength: 2048
+        externalStatus:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 255
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CriterionExtractionJobCreate:
+      type: object
+      additionalProperties: false
+      required: [documentIds]
+      properties:
+        documentIds:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          description: Documente ale proiectului din care AI-ul poate propune criterii.
+          items:
+            type: string
+            format: uuid
+
+    AnalysisJobCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        projectDocumentIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          default: []
+          items:
+            type: string
+            format: uuid
+
+        previousReportIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          default: []
+          items:
+            type: string
+            format: uuid
+
+    AnalysisJobKind:
+      type: string
+      enum: [analyze_report, extract_criteria]
+
+    AnalysisJobStatus:
+      type: string
+      enum: [queued, running, succeeded, failed, cancelled]
+
+    AnalysisJobError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          minLength: 1
+          maxLength: 500
+
+    AnalysisJob:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - projectId
+        - kind
+        - reportId
+        - status
+        - documentIds
+        - projectDocumentIds
+        - previousReportIds
+        - criteriaSnapshotVersion
+        - proposalCount
+        - createdAt
+        - startedAt
+        - completedAt
+        - error
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        kind:
+          $ref: '#/components/schemas/AnalysisJobKind'
+        reportId:
+          type: [string, 'null']
+          format: uuid
+        status:
+          $ref: '#/components/schemas/AnalysisJobStatus'
+        documentIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        projectDocumentIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        previousReportIds:
+          type: array
+          uniqueItems: true
+          maxItems: 100
+          items:
+            type: string
+            format: uuid
+        criteriaSnapshotVersion:
+          type: [integer, 'null']
+          minimum: 1
+        proposalCount:
+          type: [integer, 'null']
+          minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        startedAt:
+          type: [string, 'null']
+          format: date-time
+        completedAt:
+          type: [string, 'null']
+          format: date-time
+        error:
+          oneOf:
+            - $ref: '#/components/schemas/AnalysisJobError'
+            - type: 'null'
+      allOf:
+        - if:
+            properties:
+              kind:
+                const: extract_criteria
+            required: [kind]
+          then:
+            properties:
+              reportId:
+                type: 'null'
+              documentIds:
+                minItems: 1
+              projectDocumentIds:
+                maxItems: 0
+              previousReportIds:
+                maxItems: 0
+              criteriaSnapshotVersion:
+                type: 'null'
+        - if:
+            properties:
+              kind:
+                const: analyze_report
+            required: [kind]
+          then:
+            properties:
+              reportId:
+                type: string
+                format: uuid
+              documentIds:
+                maxItems: 0
+              criteriaSnapshotVersion:
+                type: integer
+                minimum: 1
+              proposalCount:
+                type: 'null'
+        - if:
+            properties:
+              kind:
+                const: extract_criteria
+              status:
+                const: succeeded
+            required: [kind, status]
+          then:
+            properties:
+              proposalCount:
+                type: integer
+                minimum: 0
+
+    CriterionProposalReviewAction:
+      type: string
+      enum: [accept, correct, reject]
+
+    CriterionProposalCorrection:
+      type: object
+      additionalProperties: false
+      required: [code, description, sourceAnchors]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        deadline:
+          type: [string, 'null']
+          format: date
+        sourceAnchors:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SourceAnchor'
+
+    CriterionProposalReview:
+      type: object
+      additionalProperties: false
+      required: [proposalId, proposalRevision, action]
+      properties:
+        proposalId:
+          type: string
+          format: uuid
+        proposalRevision:
+          type: integer
+          minimum: 1
+        action:
+          $ref: '#/components/schemas/CriterionProposalReviewAction'
+        correction:
+          $ref: '#/components/schemas/CriterionProposalCorrection'
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      allOf:
+        - if:
+            properties:
+              action:
+                const: correct
+            required: [action]
+          then:
+            required: [correction, comment]
+          else:
+            properties:
+              correction: false
+        - if:
+            properties:
+              action:
+                const: reject
+            required: [action]
+          then:
+            required: [comment]
+
+    CriterionProposalReviewBatch:
+      type: object
+      additionalProperties: false
+      required: [reviews]
+      properties:
+        reviews:
+          type: array
+          minItems: 1
+          maxItems: 100
+          uniqueItems: true
+          items:
+            $ref: '#/components/schemas/CriterionProposalReview'
+
+    CriterionProposalReviewRecord:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - proposalId
+        - proposalRevision
+        - action
+        - correction
+        - comment
+        - createdCriterion
+        - reviewedBy
+        - reviewedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        proposalId:
+          type: string
+          format: uuid
+        proposalRevision:
+          type: integer
+          minimum: 1
+        action:
+          $ref: '#/components/schemas/CriterionProposalReviewAction'
+        correction:
+          oneOf:
+            - $ref: '#/components/schemas/CriterionProposalCorrection'
+            - type: 'null'
+        comment:
+          type: [string, 'null']
+          maxLength: 4000
+        createdCriterion:
+          oneOf:
+            - $ref: '#/components/schemas/Criterion'
+            - type: 'null'
+        reviewedBy:
+          type: string
+          minLength: 1
+          maxLength: 255
+        reviewedAt:
+          type: string
+          format: date-time
+      allOf:
+        - if:
+            properties:
+              action:
+                enum: [accept, correct]
+            required: [action]
+          then:
+            properties:
+              createdCriterion:
+                $ref: '#/components/schemas/Criterion'
+        - if:
+            properties:
+              action:
+                const: reject
+            required: [action]
+          then:
+            properties:
+              createdCriterion:
+                type: 'null'
+
+    CriterionProposal:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - analysisJobId
+        - projectId
+        - revision
+        - proposedCode
+        - proposedDescription
+        - proposedDeadline
+        - sourceAnchors
+        - review
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        analysisJobId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        proposedCode:
+          type: string
+          minLength: 1
+          maxLength: 100
+        proposedDescription:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        proposedDeadline:
+          type: [string, 'null']
+          format: date
+        sourceAnchors:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SourceAnchor'
+        review:
+          oneOf:
+            - $ref: '#/components/schemas/CriterionProposalReviewRecord'
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+
+    CriterionProposalReviewBatchResult:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/CriterionProposalReviewRecord'
+
+    AIOutcome:
+      type: string
+      enum:
+        - compliant
+        - non_compliant
+        - partially_compliant
+        - not_applicable
+        - insufficient_evidence
+
+    ValidationStatus:
+      type: string
+      enum:
+        - awaiting_user_decision
+        - decided
+        - insufficient_evidence
+        - analysis_failed
+
+    DecisionAction:
+      type: string
+      enum: [confirm, correct, reject]
+
+    UserDecisionCreate:
+      type: object
+      additionalProperties: false
+      required: [action, validationRevision]
+      properties:
+        action:
+          $ref: '#/components/schemas/DecisionAction'
+        validationRevision:
+          type: integer
+          minimum: 1
+        finalOutcome:
+          $ref: '#/components/schemas/AIOutcome'
+        comment:
+          type: string
+          minLength: 1
+          maxLength: 4000
+      allOf:
+        - if:
+            properties:
+              action:
+                const: correct
+            required: [action]
+          then:
+            properties:
+              finalOutcome:
+                $ref: '#/components/schemas/AIOutcome'
+              comment:
+                type: string
+                minLength: 1
+                maxLength: 4000
+            required: [finalOutcome, comment]
+          else:
+            properties:
+              finalOutcome: false
+        - if:
+            properties:
+              action:
+                const: reject
+            required: [action]
+          then:
+            properties:
+              comment:
+                type: string
+                minLength: 1
+                maxLength: 4000
+            required: [comment]
+
+    UserDecision:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - validationId
+        - validationRevision
+        - action
+        - finalOutcome
+        - comment
+        - decidedBy
+        - decidedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        validationId:
+          type: string
+          format: uuid
+        validationRevision:
+          type: integer
+          minimum: 1
+        action:
+          $ref: '#/components/schemas/DecisionAction'
+        finalOutcome:
+          type: [string, 'null']
+          enum:
+            - compliant
+            - non_compliant
+            - partially_compliant
+            - not_applicable
+            - insufficient_evidence
+            - null
+        comment:
+          type: [string, 'null']
+          maxLength: 4000
+        decidedBy:
+          type: string
+          minLength: 1
+          maxLength: 255
+        decidedAt:
+          type: string
+          format: date-time
+
+    CriterionValidation:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - reportId
+        - criterionId
+        - criterionVersion
+        - analysisJobId
+        - revision
+        - status
+        - aiOutcome
+        - aiRationale
+        - sourceAnchors
+        - userDecision
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        reportId:
+          type: string
+          format: uuid
+        criterionId:
+          type: string
+          format: uuid
+        criterionVersion:
+          type: integer
+          minimum: 1
+        analysisJobId:
+          type: string
+          format: uuid
+        revision:
+          type: integer
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/ValidationStatus'
+        aiOutcome:
+          $ref: '#/components/schemas/AIOutcome'
+        aiRationale:
+          type: string
+          minLength: 1
+          maxLength: 8000
+        sourceAnchors:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/SourceAnchor'
+        userDecision:
+          oneOf:
+            - $ref: '#/components/schemas/UserDecision'
+            - type: 'null'
+        createdAt:
+          type: string
+          format: date-time
+      allOf:
+        - if:
+            properties:
+              aiOutcome:
+                not:
+                  const: insufficient_evidence
+            required: [aiOutcome]
+          then:
+            properties:
+              sourceAnchors:
+                minItems: 1
+
+    PaginatedProjects:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    PaginatedCriteria:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Criterion'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    PaginatedCriterionProposals:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CriterionProposal'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    PaginatedReports:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Report'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    PaginatedValidations:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CriterionValidation'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    FieldError:
+      type: object
+      additionalProperties: false
+      required: [field, code, message]
+      properties:
+        field:
+          type: string
+          minLength: 1
+          maxLength: 255
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        message:
+          type: string
+          minLength: 1
+          maxLength: 1000
+
+    ProblemDetails:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, detail, instance, code, requestId]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          minLength: 1
+          maxLength: 2000
+        instance:
+          type: string
+          format: uri-reference
+        code:
+          type: string
+          minLength: 1
+          maxLength: 100
+        requestId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        errors:
+          type: array
+          maxItems: 100
+          items:
+            $ref: '#/components/schemas/FieldError'

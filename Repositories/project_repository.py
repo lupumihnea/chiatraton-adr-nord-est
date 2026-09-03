@@ -1,32 +1,38 @@
-from __future__ import annotations
-
 from typing import List
 
-from DAO.projects_DAO import ProjectDAO
+from Objects.project import Project
 
 
 class ProjectRepository:
     @staticmethod
-    def get_project_by_id(cursor, project_id: int) -> ProjectDAO | None:
-        cursor.execute("SELECT id, call_id, time_ending, name FROM project WHERE id = ?", (project_id,))
-        row = cursor.fetchone()
-        return ProjectDAO.from_row(row) if row else None
+    def get_project_by_id(cursor,project_id) ->Project:
+        select_statement = "SELECT * FROM projects WHERE id = ?"
+        cursor.execute(select_statement,(project_id,))
+        row=cursor.fetchone()
+        return Project.from_row(row)
+
 
     @staticmethod
-    def get_all_projects(cursor) -> List[ProjectDAO]:
-        cursor.execute("SELECT id, call_id, time_ending, name FROM project ORDER BY id")
-        return [ProjectDAO.from_row(row) for row in cursor.fetchall()]
+    def get_all_projects(cursor) -> List[Project]:
+        select_statement = "SELECT * FROM projects"
+        cursor.execute(select_statement)
+        rows = cursor.fetchall()
+        return [Project.from_row(row) for row in rows]
+
 
     @staticmethod
-    def upsert(cursor, project: ProjectDAO) -> None:
-        cursor.execute(
-            """
-            INSERT INTO project(id, call_id, time_ending, name)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                call_id=excluded.call_id,
-                time_ending=excluded.time_ending,
-                name=excluded.name
-            """,
-            (project.id, project.call_id, project.time_ending, project.name),
-        )
+    def insert_project(cursor,project_id, call_id, name=None, client=None) -> Project:
+        insert_statement = "INSERT INTO projects (id, call_id, name, client) VALUES (?, ?, ?, ?)"
+        cursor.execute(insert_statement, (project_id, call_id, name, client))
+        return Project(id=project_id, call_id=call_id,  name=name, client=client)
+
+    # @staticmethod
+    # def update_project(cursor, id, call_id, time_ending, name=None) -> ProjectDAO:
+    #     update_statement = "UPDATE projects SET call_id = ?, time_ending = ?, name = ? WHERE id = ?"
+    #     cursor.execute(update_statement, (call_id, time_ending, name, id))
+    #     return ProjectDAO(id=id, call_id=call_id, time_ending=time_ending, name=name)
+
+    @staticmethod
+    def delete_project(cursor, project_id):
+        delete_statement = "DELETE FROM projects WHERE id = ?"
+        cursor.execute(delete_statement, (project_id,))

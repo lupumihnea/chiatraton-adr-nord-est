@@ -27,11 +27,7 @@ Pentru contractele noi se folosește `criteria`, nu `obligations`. Pentru lucrul
 
 ### 4.1 Configurarea proiectului
 
-Utilizatorul poate crea un `Project`, îi poate stabili data finalizării și `monitoringYears` (`X`) și îi poate atașa `Document`. Data implicită de încheiere a monitorizării este:
-
-`monitoringEndDate = completionDate + monitoringYears`
-
-`X` nu este codificat cu o valoare fixă. Durata și data calculată trebuie păstrate explicit și validate față de contractul de finanțare aplicabil proiectului.
+Utilizatorul poate crea un `Project`, îi poate stabili data finalizării și `monitoringEndDate` și îi poate atașa `Document`. `monitoringEndDate` este data contractuală explicită până la care proiectul primește rapoarte și trebuie să fie egală cu sau ulterioară datei finalizării.
 
 ### 4.2 Stabilirea criteriilor
 
@@ -41,7 +37,9 @@ AI-ul poate propune `Criterion` din documentele proiectului. Utilizatorul confir
 
 Un `Project` primește `Report` periodice. Produsul trebuie să poată reprezenta cel puțin rapoarte de progres din implementare, raportul final și rapoarte de durabilitate post-implementare, fără a presupune aceeași cadență pentru toate tipurile.
 
-Rapoartele continuă până la `monitoringEndDate`. Cadența este metadată a raportului sau a proiectului, nu logică fixată în UI.
+Rapoartele continuă până la `monitoringEndDate`. Cadența este metadată a raportului sau a proiectului, nu logică fixată în UI. Un raport are exact un document principal și poate avea mai multe documente suport.
+
+Statusul intern ChIAtraton este separat de `externalStatus`. Un raport poate păstra `externalSystem`, `externalId`, `externalUrl` și `externalStatus` fără a executa acțiuni în MyADR/MySMIS.
 
 ### 4.4 Analiza
 
@@ -57,7 +55,7 @@ Dacă pagina sau pasajul nu pot fi determinate, rezultatul nu poate fi prezentat
 
 ### 4.5 Decizia utilizatorului
 
-AI-ul propune o stare, o explicație și sursele. Utilizatorul ia decizia finală prin `UserDecision`: confirmă, corectează, respinge sau solicită clarificări.
+AI-ul propune o stare, o explicație și sursele. Utilizatorul ia decizia finală prin `UserDecision`: confirmă, corectează sau respinge. Un comentariu poate recomanda un follow-up în sistemul extern, dar ChIAtraton nu pornește o clarificare oficială.
 
 Interfața poate prioritiza excepțiile, dar finalizarea unui raport nu trebuie să transforme automat propunerile AI în decizii umane.
 
@@ -90,13 +88,14 @@ Datele sunt izolate pe raport. Validarea Raportului 2 nu suprascrie validarea Ra
 - decizii juridice autonome;
 - acces direct UI -> DB sau UI -> Qwen;
 - publicarea documentelor beneficiarului;
+- înlocuirea task-urilor, priorităților, distribuirii, validării, autorizării sau clarificărilor oficiale din MyADR/MySMIS;
 - schimbarea implementării existente din `DAO/` și `DataBase/` în acest branch;
 - migrarea efectivă de la SQLite la PostgreSQL.
 
 ## 8. Criterii de acceptare ale contextului de proiect
 
 - Toți termenii canonici sunt definiți și folosiți consecvent.
-- Formula de monitorizare folosește data finalizării + `X` ani, cu `X` configurabil.
+- Perioada de monitorizare folosește `monitoringEndDate`, data contractuală explicită.
 - Modelul descrie validări separate per raport și criteriu.
 - Contractul AI refuză constatări fără document, pagină și pasaj.
 - Responsabilitatea deciziei finale este atribuită utilizatorului.

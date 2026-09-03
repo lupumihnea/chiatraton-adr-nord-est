@@ -1,212 +1,204 @@
-# ChIAtraton – ADR Nord-Est Monitoring Copilot
+# ChIAtraton - ADR Nord-Est
 
-Acest branch integrează prototipul RAG/OpenRouter cu proiectul NiceGUI + repository/DAO și implementează fluxul complet de verificare a unui raport periodic.
+ChIAtraton este un AI verification workspace pentru raportul periodic selectat. Aplicația
+organizează proiectele, documentele, criteriile, rapoartele și dovezile, iar AI-ul propune
+constatări pe care utilizatorul le confirmă, corectează sau respinge. Nu înlocuiește
+MyADR/MySMIS și nu execută task-uri, autorizări ori clarificări oficiale.
 
-AI-ul **nu ia decizia finală**. El identifică excepții verificabile; utilizatorul confirmă, corectează, respinge sau cere clarificări. Istoricul analizelor și al deciziilor este păstrat.
-
-## Workflow implementat
-
-1. Utilizatorul deschide proiectul și selectează un raport/task existent.
-2. Aplicația încarcă proiectul, raportul, documentele asociate și rapoartele anterioare.
-3. OpenRouter/Qwen decide ce criterii sunt aplicabile perioadei raportate.
-4. Pentru fiecare criteriu compară raportul cu:
-   - sursa exactă a criteriului (contract/anexă/cerere/plan etc.);
-   - documentele relevante ale proiectului;
-   - rapoartele periodice anterioare.
-5. UI-ul afișează **numai**:
-   - neconcordanțe;
-   - informații lipsă;
-   - valori/date diferite;
-   - dovezi insuficiente;
-   - contradicții între rapoarte;
-   - cazuri care necesită analiză umană.
-6. Pentru fiecare excepție sunt păstrate și afișate cele două pasaje-sursă și paginile, atunci când textul poate fi extras mecanic. Modelul returnează doar ID-uri de evidence; pasajele finale sunt luate local din documente, nu rescrise de model.
-7. Utilizatorul confirmă, corectează, respinge sau solicită clarificări.
-8. Aplicația generează o notă de verificare sau un draft de clarificare din constatările revizuite.
-9. Rezultatul poate fi copiat sau exportat `.txt` pentru transfer în sistemul oficial.
-10. `AnalysisJob`, reviziile validărilor, `UserDecision` și exporturile rămân în istoric.
-
-## AI integrat
-
-- Provider: **OpenRouter paid-only**.
-- Model implicit: `qwen/qwen3-235b-a22b-2507`.
-- Nu există fallback la modele `:free`.
-- Embeddings: `intfloat/multilingual-e5-small`, local.
-- Parsing/RAG: local.
-- Obligațiile/criteriile și pasajele-sursă rămân exact textul românesc extras local.
-- Cheia OpenRouter nu este salvată în repository.
+Implementarea curentă oferă întregul workflow HTTP API v1 în modul
+`development`: servicii de aplicație reale, repository-uri și stocare de documente în
+memorie, joburi locale, adaptoare AI fake deterministe pentru teste și adaptorul real
+Qwen/OpenRouter din `AI/`. Toate exemplele și fixture-urile sunt sintetice.
 
 ## Instalare
 
-În PowerShell, din rădăcina proiectului:
+Este necesar Python 3.11 sau mai nou.
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m pip install -e ".[test,ui,ai]"
+Copy-Item .env.example .env
 ```
 
-Configurați modelul:
+În `.env`, înlocuiește valoarea sintetică `CHIATRATON_JWT_SECRET` cu un secret local
+aleatoriu. Fișierul `.env` este ignorat de Git.
+
+## Pornire în development/demo
 
 ```powershell
-$env:OPENROUTER_API_KEY="CHEIA_TA"
-$env:OPENROUTER_PAID_MODEL="qwen/qwen3-235b-a22b-2507"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-### Refolosirea bazei din prototipul RAG existent
+Documentația interactivă este la `http://127.0.0.1:8000/docs`, iar health check-ul public
+la `http://127.0.0.1:8000/health`. Toate operațiile `/api/v1` cer Bearer JWT și toate
+operațiile `POST` cer `Idempotency-Key`.
 
-Dacă baza ta curentă este `adr_rag.db`, cel mai simplu este să o copiezi în rădăcina acestui proiect și să rulezi:
+Generează un token cu durată scurtă numai pentru development/test:
 
 ```powershell
-$env:ADR_DB_PATH="adr_rag.db"
-$env:DATABASE_URL="sqlite:///adr_rag.db"
-python workflow_cli.py init-db
+$token = python -m app.core.dev_token --subject synthetic-demo-user --minutes 60
 ```
 
-`init-db` **nu șterge** proiectele, documentele, criteriile sau referințele existente. Adaugă doar tabelele necesare workflow-ului de rapoarte și istoric.
+Generatorul folosește configurația din `.env`, nu afișează secretul și refuză rularea
+când `CHIATRATON_ENVIRONMENT=production`. Nu există endpoint de autentificare deoarece
+acesta nu face parte din contractul API v1.
 
-Dacă nu setezi nimic, baza implicită este `documents.db`.
-
-## Pornire UI
+Într-un al doilea terminal, transmite tokenul către clientul UI și pornește NiceGUI:
 
 ```powershell
-python Interface\main.py
+$token = python -m app.core.dev_token --subject synthetic-demo-user --minutes 60
+$env:CHIATRATON_API_BASE_URL = "http://127.0.0.1:8000"
+$env:CHIATRATON_UI_BEARER_TOKEN = $token
+python -m Interface.main
 ```
 
-Apoi deschide `http://localhost:8080`.
+Interfața este disponibilă implicit la `http://127.0.0.1:8081`. Portul poate fi schimbat
+prin `CHIATRATON_UI_PORT`. UI-ul listează proiectele după nume și UUID, creează proiecte
+cu exact câmpurile contractuale și încarcă documente prin API; nu accesează direct
+repository-uri, DAO-uri sau baza de date.
 
-UI-ul este organizat astfel:
-
-`Proiect -> Raport/task -> Analiză -> Excepții -> Decizie umană -> Notă/Draft -> Istoric`
-
-## CLI – flux minim
-
-### 1. Inițializează extensiile DB
+Exemplu minimal:
 
 ```powershell
-python workflow_cli.py init-db
+$headers = @{
+  Authorization = "Bearer $token"
+  "Idempotency-Key" = "synthetic-project-0001"
+}
+$body = @{
+  name = "Synthetic monitoring project"
+  completionDate = "2030-12-31"
+  monitoringEndDate = "2033-12-31"
+} | ConvertTo-Json
+Invoke-RestMethod http://127.0.0.1:8000/api/v1/projects `
+  -Method Post -Headers $headers -ContentType application/json -Body $body
 ```
 
-### 2. Leagă documentele proiectului
+## Configurare
 
-Pentru proiectul folosit în prototip:
+Variabilele au prefixul `CHIATRATON_`:
+
+| Variabilă | Development/demo | Production |
+|---|---|---|
+| `ENVIRONMENT` | `development` sau `test` | `production` |
+| `JWT_SECRET` | secret local | secret injectat la runtime |
+| `IDEMPOTENCY_BACKEND` | `memory` | `external` |
+| `REPOSITORY_BACKEND` | `memory` | `external` |
+| `DOCUMENT_STORAGE_BACKEND` | `memory` | `external` |
+| `CRITERION_EXTRACTOR_BACKEND` | `fake` sau `qwen` | `external` |
+| `REPORT_ANALYZER_BACKEND` | `fake` sau `qwen` | `external` |
+| `JOB_RUNNER_BACKEND` | `local` | `external` |
+| `API_BASE_URL` | `http://127.0.0.1:8000` | URL-ul API injectat la runtime |
+| `UI_BEARER_TOKEN` | token local cu durată scurtă | token injectat la runtime |
+| `UI_HOST` / `UI_PORT` | `127.0.0.1` / `8081` | configurate la deployment |
+
+Pornirea în production este refuzată dacă a rămas selectat oricare adaptor in-memory,
+fake sau local. Compoziția production trebuie să injecteze explicit `ApplicationService`
+și `IdempotencyStore` cu adaptoarele infrastructurii reale.
+
+
+## Qwen/OpenRouter real
+
+Implementarea AI reală este compatibilă cu contractele curente și nu introduce un
+workflow paralel sau acces direct la DB. Instalează extra-ul AI:
 
 ```powershell
-python workflow_cli.py link-documents `
-  --project-id 123456 `
-  --document-ids 1 3 4 5 6 7 8 9
+python -m pip install -e ".[ui,ai,test]"
 ```
 
-Documentul raportului se înregistrează separat ca `Report`.
-
-### 3. Opțional: re-extrage criteriile
+Apoi configurează:
 
 ```powershell
-python workflow_cli.py extract-criteria `
-  --project-id 123456 `
-  --document-ids 1 3 4 5 6 7 8 9
+$env:CHIATRATON_CRITERION_EXTRACTOR_BACKEND="qwen"
+$env:CHIATRATON_REPORT_ANALYZER_BACKEND="qwen"
+$env:AI_PROVIDER="qwen"
+$env:AI_MODEL_NAME="qwen/qwen3-235b-a22b-2507"
+$env:AI_BASE_URL="https://openrouter.ai/api/v1"
+$env:AI_API_KEY="CHEIA_TA_NOUA"
+$env:AI_CONTRACT_VERSION="1.0"
 ```
 
-Aceasta folosește pipeline-ul RAG recall-oriented deja dezvoltat și salvează `obligation + references` în aceeași bază. Din motive de audit, setul nu poate fi înlocuit după ce există validări istorice; o versiune ulterioară de criterii trebuie tratată explicit.
+Modelul nu furnizează direct pasajele persistate. El returnează pointeri către
+source-units, iar adaptorul reconstruiește local pasajul exact și pagina înainte ca
+API-ul să creeze `CriterionProposal` sau `CriterionValidation`. Detalii în
+`docs/ai-implementation.md`.
 
-### 4. Înregistrează raportul existent
+## Matrice endpoint-uri
 
-Presupunând că PDF-ul raportului este deja în tabela `document` cu `id=10`:
+| Metodă | Rută | Implementare curentă |
+|---|---|---|
+| GET | `/health` | funcțional, public |
+| POST | `/api/v1/projects` | funcțional, in-memory |
+| GET | `/api/v1/projects` | funcțional, cursor opac |
+| POST | `/api/v1/projects/{projectId}/documents` | funcțional, conținut in-memory separat |
+| POST | `/api/v1/projects/{projectId}/criteria` | funcțional, cod unic și ancore validate |
+| GET | `/api/v1/projects/{projectId}/criteria` | funcțional, cursor opac |
+| POST | `/api/v1/projects/{projectId}/criterion-extraction-jobs` | funcțional, `202` + job local |
+| GET | `/api/v1/analysis-jobs/{jobId}` | funcțional pentru ambele tipuri de job |
+| GET | `/api/v1/criterion-extraction-jobs/{jobId}/proposals` | funcțional, auditabil |
+| POST | `/api/v1/criterion-extraction-jobs/{jobId}/proposal-reviews` | funcțional, batch atomic |
+| POST | `/api/v1/projects/{projectId}/reports` | funcțional, document primar unic |
+| GET | `/api/v1/projects/{projectId}/reports` | funcțional, cursor opac |
+| POST | `/api/v1/reports/{reportId}/analysis-jobs` | funcțional, `202` + snapshot criterii |
+| GET | `/api/v1/reports/{reportId}/validations` | funcțional, istoric opțional |
+| POST | `/api/v1/validations/{validationId}/decisions` | funcțional, control optimist al reviziei |
+
+Rutele FastAPI depind numai de interfața `ApplicationService`. Serviciul concret depinde
+de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnalyzer` și
+`JobRunner`; nu importă SQLite, Qwen, OpenRouter sau NiceGUI.
+
+## Reguli importante
+
+- AI-ul creează `CriterionProposal`, nu `Criterion`; numai review-ul utilizatorului poate
+  crea criterii.
+- Review-ul batch este atomic. `accept` și `correct` creează criterii, `reject` nu creează.
+- Fiecare propunere și fiecare constatare factuală are `SourceAnchor` cu document, pagină
+  și pasaj.
+- O reanalizare adaugă o nouă revizie de `CriterionValidation`; istoricul și deciziile
+  vechi rămân disponibile.
+- `Report.status` este independent de `externalStatus`.
+- Repetarea unui `POST` cu aceeași cheie și același payload returnează răspunsul inițial;
+  aceeași cheie cu alt payload produce `409 idempotency_conflict`.
+- Conținutul documentelor nu este inclus în loguri sau erori.
+
+## Teste și verificări
 
 ```powershell
-python workflow_cli.py add-report `
-  --project-id 123456 `
-  --document-id 10 `
-  --sequence 1 `
-  --kind implementation_progress `
-  --period-start 2025-01-01 `
-  --period-end 2025-03-31
+python -m pytest
+python -m ruff check app tests Interface
+python -m compileall -q app tests Interface
 ```
 
-### 5. Analizează raportul
+Testele validează și contractul OpenAPI 3.1, exemplele JSON, JWT, ProblemDetails,
+idempotency și întregul workflow Project → Document → CriterionProposal → Criterion →
+Report → AnalysisJob → CriterionValidation → UserDecision.
 
-```powershell
-python workflow_cli.py analyze-report --report-id 1
-```
+## Limitări și următoarele adaptoare
 
-CLI-ul și UI-ul afișează numai excepțiile. Intern, baza păstrează și criteriile evaluate ca `ok/not_applicable`, astfel încât analiza să fie auditabilă.
+Starea, cursoarele, fișierele și joburile locale se pierd la restart și nu sunt potrivite
+pentru mai multe procese. Modul `fake` rămâne disponibil pentru testele structurale. Pentru analiza reală,
+setează backends la `qwen`; adaptorul din `AI/` parsează documentele, face retrieval
+semantic multilingual E5 și apelează Qwen prin OpenRouter paid-only.
 
-### 6. Decizie umană
+- Dragoș poate înlocui `InMemoryUnitOfWorkFactory` și `InMemoryDocumentStorage` cu
+  adaptoarele SQLite, apoi PostgreSQL, fără a schimba rutele.
+- Adaptorul Qwen este implementat în `AI/qwen_adapter.py` și este injectat numai
+  prin porturile `CriterionExtractor` / `ReportAnalyzer`; modul fake rămâne pentru teste.
+- Un runner durabil și un `IdempotencyStore` extern trebuie injectate înainte de
+  production.
+- Validarea faptului că pasajul AI există textual în document va fi realizată de fluxul
+  real de extracție a conținutului; adaptorul fake validează doar forma și apartenența
+  ancorei.
 
-```powershell
-python workflow_cli.py decide `
-  --validation-id 12 `
-  --action confirmed
-```
+## Documentație
 
-Acțiuni disponibile: `confirmed`, `corrected`, `rejected`, `clarification_requested`.
+- [Contractul HTTP API v1](contracts/http-api.md)
+- [OpenAPI 3.1](contracts/openapi.yaml)
+- [Contractul AI](contracts/ai-contract.md)
+- [Specificația produsului](docs/product-spec.md)
+- [Workflow](docs/workflow.md)
+- [Modelul de date](docs/data-model.md)
+- [Arhitectura](docs/architecture.md)
 
-### 7. Generează rezultat
-
-```powershell
-python workflow_cli.py generate --report-id 1 --kind verification_note
-```
-
-sau:
-
-```powershell
-python workflow_cli.py generate --report-id 1 --kind clarification_draft
-```
-
-Fișierul este scris în `exports/` și înregistrat în istoric.
-
-## Baza de date
-
-Cele patru entități existente din RAG rămân:
-
-- `project`
-- `document`
-- `obligation` – conceptul legacy folosit ca `Criterion`
-- `references` – sursa exactă a criteriului
-
-Extensia workflow adaugă:
-
-- `project_documents`
-- `reports`
-- `analysis_jobs`
-- `criterion_validations`
-- `validation_sources`
-- `user_decisions`
-- `generated_outputs`
-
-Schema veche cu denumiri plural (`projects`, `documents`, `obligations`, `referinte`) este importată best-effort dacă este găsită într-o bază veche goală pe partea canonică.
-
-## Reguli de auditabilitate
-
-- Fiecare criteriu extras de RAG trebuie să aibă o referință exactă.
-- Pentru o constatare, modelul selectează doar evidence IDs; textul și pagina sunt recuperate local.
-- UI-ul normalizează doar whitespace-ul pentru afișare; nu schimbă cuvintele, punctuația sau diacriticele pasajelor.
-- Analiza unui raport nu suprascrie raportul anterior.
-- Reanalizarea cu `--force` creează revizii noi.
-- Deciziile umane sunt append-only.
-- Un retry cu aceeași stare a raportului și criteriilor este idempotent.
-- Dacă un document nu are strat text, aplicația nu inventează un pasaj; cazul este tratat ca `insufficient_evidence`/analiză umană.
-
-## Structură
-
-- `Interface/` – NiceGUI
-- `API/monitoring_api.py` – boundary consumat de UI/CLI
-- `Services/monitoring_service.py` – orchestrarea workflow-ului
-- `AI/openrouter_monitoring_client.py` – comparația raport-criteriu
-- `adr_rag/` – parsing, embeddings, retrieval și extracția criteriilor
-- `Repositories/` – acces DB
-- `DAO/` – obiecte de transfer legacy
-- `DataBase/db_schema.py` – schema SQLite integrată, aditivă
-- `workflow_cli.py` – flux end-to-end fără UI
-
-## Teste
-
-```powershell
-pytest -q
-```
-
-Testele incluse verifică fluxul analiză -> două surse -> decizie -> export -> istoric și idempotency, fără apel real către OpenRouter.
-
-## Confidențialitate
-
-`exports/`, bazele de date, `.env` și sursele beneficiarului trebuie să rămână locale. Nu introduce cheia OpenRouter în cod sau Git. Documentele și pasajele sunt trimise către furnizor numai în contextul analizei curente; politica de retenție a furnizorului trebuie verificată înainte de folosirea datelor neanonimizate.
+Nu se publică fotografii realizate la ADR, date reale despre beneficiari, URL-uri interne
+sau alte informații sensibile.

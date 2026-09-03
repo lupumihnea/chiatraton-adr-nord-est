@@ -1,0 +1,82 @@
+{
+  "items": [
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1",
+      "proposalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+      "proposalRevision": 1,
+      "action": "accept",
+      "correction": null,
+      "comment": null,
+      "createdCriterion": {
+        "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc1",
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "code": "CRIT-SYN-101",
+        "description": "Raportul periodic descrie progresul indicatorului sintetic.",
+        "deadline": "2027-03-31",
+        "sourceAnchors": [
+          {
+            "documentId": "22222222-2222-4222-8222-222222222222",
+            "pageNumber": 4,
+            "passage": "Progresul indicatorului sintetic se prezintă pentru fiecare perioadă de raportare."
+          }
+        ],
+        "version": 1,
+        "active": true,
+        "createdAt": "2027-01-15T09:05:00Z",
+        "updatedAt": "2027-01-15T09:05:00Z"
+      },
+      "reviewedBy": "user_synthetic_001",
+      "reviewedAt": "2027-01-15T09:05:00Z"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb2",
+      "proposalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+      "proposalRevision": 1,
+      "action": "correct",
+      "correction": {
+        "code": "CRIT-SYN-102-C",
+        "description": "Raportul periodic enumeră documentele suport relevante.",
+        "deadline": null,
+        "sourceAnchors": [
+          {
+            "documentId": "33333333-3333-4333-8333-333333333333",
+            "pageNumber": 2,
+            "passage": "Raportul periodic include lista documentelor suport utilizate."
+          }
+        ]
+      },
+      "comment": "Formularea a fost făcută mai precisă.",
+      "createdCriterion": {
+        "id": "cccccccc-cccc-4ccc-8ccc-ccccccccccc2",
+        "projectId": "11111111-1111-4111-8111-111111111111",
+        "code": "CRIT-SYN-102-C",
+        "description": "Raportul periodic enumeră documentele suport relevante.",
+        "deadline": null,
+        "sourceAnchors": [
+          {
+            "documentId": "33333333-3333-4333-8333-333333333333",
+            "pageNumber": 2,
+            "passage": "Raportul periodic include lista documentelor suport utilizate."
+          }
+        ],
+        "version": 1,
+        "active": true,
+        "createdAt": "2027-01-15T09:05:00Z",
+        "updatedAt": "2027-01-15T09:05:00Z"
+      },
+      "reviewedBy": "user_synthetic_001",
+      "reviewedAt": "2027-01-15T09:05:00Z"
+    },
+    {
+      "id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb3",
+      "proposalId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      "proposalRevision": 1,
+      "action": "reject",
+      "correction": null,
+      "comment": "Pasajul nu descrie un criteriu de monitorizare distinct.",
+      "createdCriterion": null,
+      "reviewedBy": "user_synthetic_001",
+      "reviewedAt": "2027-01-15T09:05:00Z"
+    }
+  ]
+}

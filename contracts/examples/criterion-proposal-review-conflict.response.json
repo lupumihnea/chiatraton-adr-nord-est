@@ -1,0 +1,16 @@
+{
+  "type": "https://chiatraton.example/problems/proposal-already-reviewed",
+  "title": "Criterion proposal already reviewed",
+  "status": 409,
+  "detail": "The criterion proposal already has a final human review.",
+  "instance": "/api/v1/criterion-extraction-jobs/99999999-9999-4999-8999-999999999999/proposal-reviews",
+  "code": "proposal_already_reviewed",
+  "requestId": "req_synthetic_criterion_review_0001",
+  "errors": [
+    {
+      "field": "reviews[0].proposalId",
+      "code": "proposal_already_reviewed",
+      "message": "The selected proposal cannot be reviewed again."
+    }
+  ]
+}

@@ -1,37 +1,25 @@
-from __future__ import annotations
 
-from typing import List
 
-from DAO.documents_DAO import DocumentDAO
+from Objects.document import Document
 
 
 class DocumentRepository:
     @staticmethod
-    def get_document_by_id(cursor, document_id: int) -> DocumentDAO | None:
-        cursor.execute("SELECT id, type, path FROM document WHERE id = ?", (document_id,))
+    def get_document_by_id(cursor,doc_id) -> Document:
+        select_statement = "SELECT * FROM obligations WHERE id = ?"
+        cursor.execute(select_statement, (doc_id,))
         row = cursor.fetchone()
-        return DocumentDAO.from_row(row) if row else None
+        return Document.from_row(row)
 
     @staticmethod
-    def get_document_by_reference_id(cursor, ref_id: int) -> DocumentDAO | None:
-        cursor.execute(
-            """
-            SELECT d.id, d.type, d.path
-            FROM "references" r
-            JOIN document d ON d.id = r.document_id
-            WHERE r.id = ?
-            """,
-            (ref_id,),
-        )
-        row = cursor.fetchone()
-        return DocumentDAO.from_row(row) if row else None
+    def insert_document(cursor,doc_id, doc_type, path=None) -> Document:
+
+        insert_statement = "INSERT INTO documents (id,type, path) VALUES (?,?, ?)"
+        cursor.execute(insert_statement, (doc_id,doc_type, path))
+        return Document(id=doc_id, type=doc_type, path=path)
 
     @staticmethod
-    def get_all(cursor) -> List[DocumentDAO]:
-        cursor.execute("SELECT id, type, path FROM document ORDER BY id")
-        return [DocumentDAO.from_row(row) for row in cursor.fetchall()]
+    def delete_document_by_id(cursor,doc_id) :
+        select_statement = "DELETE FROM obligations WHERE id = ?"
+        cursor.execute(select_statement, (doc_id,))
 
-    @staticmethod
-    def add(cursor, type_: int, path: str) -> int:
-        cursor.execute("INSERT INTO document(type, path) VALUES (?, ?)", (type_, path))
-        return int(cursor.lastrowid)

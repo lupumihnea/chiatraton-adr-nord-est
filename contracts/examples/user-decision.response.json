@@ -1,0 +1,10 @@
+{
+  "id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  "validationId": "99999999-9999-4999-8999-999999999999",
+  "validationRevision": 1,
+  "action": "correct",
+  "finalOutcome": "compliant",
+  "comment": "Anexa sintetică furnizează dovada completă pentru perioada selectată.",
+  "decidedBy": "synthetic-user",
+  "decidedAt": "2027-04-02T09:00:00Z"
+}
