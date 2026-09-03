@@ -39,6 +39,10 @@ async def home() -> None:
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
     with ui.column().classes("w-full items-center mt-8 space-y-6 min-h-[85vh]"):
+        with ui.row().classes("absolute top-6 right-6 items-center gap-3 bg-white px-4 py-2 rounded-full shadow-sm"):
+            ui.label("Bine ai venit, expert în monitorizare!").classes("text-gray-700 font-bold text-sm")
+            ui.icon("account_circle", size="2rem").classes("text-gray-400")
+
         ui.image("/Assets/Logo-ADR.png").classes(
             "w-64 transition-transform hover:scale-105 duration-300 drop-shadow-sm"
         )
@@ -111,6 +115,12 @@ async def home() -> None:
             "w-64 py-4 mt-4 text-2xl font-extrabold shadow-xl hover:scale-105 "
             "transition-transform duration-200 text-gray-900"
         )
+        
+        recent_container = ui.column().classes(
+            "absolute left-4 top-32 w-72 p-4 items-start space-y-3 hidden lg:flex"
+        )
+        recent_container.set_visibility(False)
+
         ui.space()
 
         async def load_projects_after_connect() -> None:
@@ -125,6 +135,29 @@ async def home() -> None:
                 )
             else:
                 projects.extend(fetched)
+                
+                recent = getattr(app, "recent_projects", [])
+                if recent:
+                    recent_container.set_visibility(True)
+                    with recent_container:
+                        with ui.row().classes("items-center gap-2 mb-2"):
+                            ui.icon("history", size="sm").classes("text-yellow-600")
+                            ui.label("Proiecte recente").classes(
+                                "text-lg font-extrabold text-gray-700 uppercase tracking-wide"
+                            )
+                        with ui.column().classes("w-full gap-3"):
+                            for r_proj in recent:
+                                btn_text = f"{r_proj.get('smisCode', '')} - {r_proj.get('name', 'Proiect')}"
+                                if len(btn_text) > 35:
+                                    btn_text = btn_text[:32] + "..."
+                                ui.button(
+                                    btn_text,
+                                    on_click=lambda pid=r_proj["id"]: ui.navigate.to(f"/project/{pid}")
+                                ).props("push rounded size=md color=primary no-caps").classes(
+                                    "w-full justify-start text-left text-gray-900 font-bold shadow-md "
+                                    "hover:scale-105 transition-transform duration-200 px-4 py-3"
+                                )
+
             finally:
                 loading.set_visibility(False)
                 search_bar.enable()

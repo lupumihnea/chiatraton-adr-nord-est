@@ -39,7 +39,9 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 "Înapoi la proiect",
                 icon="arrow_back",
                 on_click=lambda: ui.navigate.to(f"/project/{project_id}"),
-            ).props("flat rounded no-caps").classes("font-bold")
+            ).props("flat rounded no-caps size=md text-color=grey-8").classes(
+                "hover:bg-gray-100 px-4 py-2 rounded-full font-bold"
+            )
             ui.label("Extragere obligații / criterii").classes(
                 "text-2xl font-extrabold text-gray-800"
             )
@@ -84,11 +86,8 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     ).classes("text-gray-500")
                     return
                 for criterion in criteria:
-                    with ui.card().classes("w-full shadow-sm border border-green-100"):
-                        ui.label(str(criterion.get("code", ""))).classes(
-                            "font-extrabold text-green-800"
-                        )
-                        ui.label(_clean(criterion.get("description"))).classes("text-gray-800")
+                    with ui.card().classes("w-full shadow-sm border border-green-100 p-4"):
+                        ui.label(_clean(criterion.get("description"))).classes("text-gray-800 text-lg font-medium")
                         ui.label(
                             f"Termen: {_deadline_text(criterion.get('deadline'))}"
                         ).classes("text-sm text-gray-600")
@@ -252,7 +251,10 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                         f"Confirmă toate ({len(unreviewed)})",
                         icon="done_all",
                         on_click=accept_all,
-                    ).props("no-caps").classes("self-start")
+                    ).props("push rounded size=md color=primary").classes(
+                        "px-4 py-2 text-sm font-extrabold shadow-lg hover:scale-105 "
+                        "transition-transform duration-200 text-gray-900 self-start"
+                    )
 
                 for proposal in proposals:
                     review = proposal.get("review")
@@ -261,11 +263,8 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     ):
                         with ui.row().classes("w-full items-start justify-between gap-3"):
                             with ui.column().classes("gap-1 flex-grow"):
-                                ui.label(str(proposal.get("proposedCode", ""))).classes(
-                                    "font-extrabold text-lg text-gray-800"
-                                )
                                 ui.label(_clean(proposal.get("proposedDescription"))).classes(
-                                    "text-gray-800"
+                                    "text-gray-800 text-lg font-medium"
                                 )
                                 ui.label(
                                     f"Termen: {_deadline_text(proposal.get('proposedDeadline'))}"
@@ -299,17 +298,23 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                                     "Confirmă",
                                     icon="check",
                                     on_click=lambda p=proposal: review_one(p, action="accept"),
-                                ).props("no-caps")
+                                ).props("push rounded size=sm color=primary no-caps").classes(
+                                    "font-extrabold shadow-sm hover:scale-105 text-gray-900 transition-transform duration-200 px-3"
+                                )
                                 ui.button(
                                     "Corectează",
                                     icon="edit",
                                     on_click=lambda p=proposal: correction_dialog(p),
-                                ).props("outline no-caps")
+                                ).props("outline rounded size=sm no-caps").classes(
+                                    "font-bold text-gray-800 hover:bg-gray-50 px-3"
+                                )
                                 ui.button(
                                     "Respinge",
                                     icon="close",
                                     on_click=lambda p=proposal: reject_dialog(p),
-                                ).props("flat color=negative no-caps")
+                                ).props("flat rounded size=sm color=negative no-caps").classes(
+                                    "font-bold hover:bg-red-50 px-3"
+                                )
 
         async def poll_job_after_connect() -> None:
             """Poll after the initial page has already been sent to the browser."""

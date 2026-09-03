@@ -211,4 +211,4 @@ def success_page(project_id: str, smis_code: str) -> None:
                     "text-lg text-gray-600 font-medium"
                 )
 
-            ui.timer(2.5, lambda: ui.navigate.to("/"), once=True)
+            ui.timer(2.5, lambda: ui.navigate.to(f"/project/{project_id}"), once=True)

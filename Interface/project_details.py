@@ -5,7 +5,7 @@ NiceGUI browser connection exists, so a busy AI backend cannot trigger
 NiceGUI's default 3-second page-build timeout.
 """
 
-from nicegui import ui
+from nicegui import app, ui
 
 from Interface.api_client import api_client, api_error_message
 
@@ -58,6 +58,11 @@ async def project_details_page(project_id: str) -> None:
                             "text-xl font-bold text-gray-700"
                         )
                 return
+
+            recent = getattr(app, "recent_projects", [])
+            recent = [p for p in recent if p["id"] != project_id]
+            recent.insert(0, {"id": project["id"], "smisCode": project.get("smisCode", ""), "name": project["name"]})
+            app.recent_projects = recent[:5]
 
             loading_label.text = "Se încarcă obligațiile..."
             try:
