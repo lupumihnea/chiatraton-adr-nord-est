@@ -1,7 +1,9 @@
-"""Synthetic, isolated API test fixtures."""
+"""Shared test fixtures: synthetic FastAPI client plus the legacy sys.path bootstrap."""
 
+import sys
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import jwt
 import pytest
@@ -10,6 +12,10 @@ from pydantic import SecretStr
 
 from app.core.config import Settings
 from app.main import create_app
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 TEST_JWT_SECRET = "synthetic-test-secret-with-sufficient-entropy"
 

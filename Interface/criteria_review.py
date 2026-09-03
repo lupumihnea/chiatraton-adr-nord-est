@@ -142,7 +142,10 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 comment = ui.textarea("Motivul corecției").props("autogrow").classes("w-full")
 
                 async def save() -> None:
-                    if not str(code.value or "").strip() or not str(description.value or "").strip():
+                    if (
+                        not str(code.value or "").strip()
+                        or not str(description.value or "").strip()
+                    ):
                         ui.notify("Codul și descrierea sunt obligatorii.", type="warning")
                         return
                     if not str(comment.value or "").strip():

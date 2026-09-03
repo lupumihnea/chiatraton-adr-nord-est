@@ -59,3 +59,34 @@ def test_contract_examples_validate_against_pydantic_models(filename, model):
 def test_every_json_example_is_covered():
     filenames = {path.name for path in (ROOT / "contracts" / "examples").glob("*.json")}
     assert filenames == set(EXAMPLE_MODELS)
+
+
+def test_project_ui_metadata_is_optional_and_serialized_with_contract_names():
+    legacy_payload = {"name": "Proiect sintetic fără metadate externe"}
+    assert ProjectCreate.model_validate(legacy_payload).smis_code is None
+
+    payload = {
+        **legacy_payload,
+        "smisCode": "654321",
+        "fundingCallId": 42,
+        "beneficiaryName": "Organizație Sintetică Delta",
+    }
+    project = ProjectCreate.model_validate(payload)
+    assert project.model_dump(by_alias=True, mode="json") == payload
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("smisCode", "12345"),
+        ("smisCode", "ABC123"),
+        ("fundingCallId", 0),
+    ],
+)
+def test_project_ui_metadata_rejects_invalid_values(field, value):
+    payload = {
+        "name": "Proiect sintetic",
+        field: value,
+    }
+    with pytest.raises(ValueError):
+        ProjectCreate.model_validate(payload)

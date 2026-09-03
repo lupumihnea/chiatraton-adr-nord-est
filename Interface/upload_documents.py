@@ -10,13 +10,13 @@ from uuid import uuid4
 from nicegui import events, ui
 
 from Interface.api_client import (
-    APIUnavailableError,
     APITimeoutError,
+    APIUnavailableError,
     IdempotencyKeyManager,
     api_client,
     api_error_message,
-    upload_fingerprint,
     json_fingerprint,
+    upload_fingerprint,
 )
 
 MAX_PDF_BYTES = 26_214_400
@@ -41,7 +41,7 @@ async def _read_pdf(event: events.UploadEventArguments) -> tuple[str, bytes]:
 
 
 @ui.page("/upload/{project_id}")
-def upload_documents_page(project_id: str) -> None:
+async def upload_documents_page(project_id: str) -> None:
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
     upload_state: list[dict[str, Any]] = []
@@ -63,7 +63,7 @@ def upload_documents_page(project_id: str) -> None:
         ):
             with ui.row().classes("items-center gap-3 mb-2"):
                 ui.icon("cloud_upload", size="md").classes("text-yellow-600")
-                ui.label(f"Încărcare documente - Proiect {project_id}").classes(
+                header_label = ui.label(f"Încărcare documente - Proiect {project_id}").classes(
                     "text-2xl font-extrabold text-gray-800 break-all"
                 )
 
@@ -291,13 +291,15 @@ def upload_documents_page(project_id: str) -> None:
 
                     if uploaded == len(pending):
                         ui.notify(
-                            f"{uploaded} document(e) au fost încărcate. Pornim extragerea obligațiilor...",
+                            f"{uploaded} document(e) au fost încărcate. "
+                            "Pornim extragerea obligațiilor...",
                             type="positive",
                             position="top",
                         )
                         if not uploaded_document_ids:
                             ui.notify(
-                                "Documentele au fost încărcate, dar API-ul nu a returnat ID-urile lor.",
+                                "Documentele au fost încărcate, dar API-ul nu a returnat "
+                                "ID-urile lor.",
                                 type="negative",
                             )
                             ui.navigate.to(f"/project/{project_id}")
@@ -377,3 +379,14 @@ def upload_documents_page(project_id: str) -> None:
                     "px-6 py-2 text-base font-extrabold shadow-xl hover:scale-105 "
                     "transition-transform duration-200 text-gray-900"
                 )
+
+        async def _show_smis_code() -> None:
+            try:
+                project = await api_client.get_project(project_id)
+            except Exception:
+                return
+            if project and project.get("smisCode"):
+                header_label.text = f"Încărcare documente - Proiect {project['smisCode']}"
+
+        await ui.context.client.connected(timeout=10.0)
+        await _show_smis_code()

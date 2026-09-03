@@ -52,15 +52,11 @@ async def home() -> None:
             )
 
         with ui.column().classes("w-full max-w-xl items-start space-y-4"):
-            project_select = ui.select(
-                options={},
-                with_input=True,
-            ).props(
-                'rounded outlined clearable options-dense use-input hide-selected '
-                'fill-input placeholder="Selectează proiectul după nume și UUID" '
-                'aria-label="Selectează proiectul după nume și UUID" '
+            search_bar = ui.input(placeholder="Introdu codul SMIS...").props(
+                'rounded outlined clearable mask="######" '
                 'input-class="text-2xl font-bold text-center"'
             ).classes("w-full text-2xl bg-white shadow-xl rounded-full border-0")
+            search_bar.disable()
 
             ui.button(
                 "Adaugă un nou proiect",
@@ -76,10 +72,33 @@ async def home() -> None:
             ui.spinner(size="md")
             ui.label("Se încarcă proiectele...")
 
+        projects: list[dict[str, object]] = []
+
         def access_project() -> None:
-            project_id = project_select.value
-            if not project_id:
-                ui.notify("Selectează un proiect.", type="warning", position="top")
+            smis_code = str(search_bar.value or "").strip()
+            if len(smis_code) != 6 or not smis_code.isdigit():
+                ui.notify(
+                    "Introdu un cod SMIS valid de șase cifre.",
+                    type="warning",
+                    position="top",
+                )
+                return
+
+            project_id = next(
+                (
+                    str(project["id"])
+                    for project in projects
+                    if str(project.get("smisCode", "")) == smis_code
+                ),
+                None,
+            )
+
+            if project_id is None:
+                ui.notify(
+                    f"Proiectul cu codul SMIS {smis_code} nu a fost găsit.",
+                    type="negative",
+                    position="top",
+                )
                 return
             ui.navigate.to(f"/project/{project_id}")
 
@@ -93,7 +112,7 @@ async def home() -> None:
 
         async def load_projects_after_connect() -> None:
             try:
-                projects = await api_client.list_all_projects()
+                fetched = await api_client.list_all_projects()
             except Exception as error:
                 ui.notify(
                     api_error_message(error),
@@ -102,16 +121,14 @@ async def home() -> None:
                     timeout=8000,
                 )
             else:
-                project_select.options = {
-                    str(project["id"]): f'{project["name"]} — {project["id"]}'
-                    for project in projects
-                    if project.get("id") and project.get("name")
-                }
-                project_select.update()
+                projects.extend(fetched)
             finally:
                 loading.set_visibility(False)
+                search_bar.enable()
 
         # Send the visible page first, then load projects over the websocket.
+        # NiceGUI's default 3-second page-build timeout can otherwise fire
+        # while a busy AI backend is still starting up.
         await ui.context.client.connected(timeout=10.0)
         await load_projects_after_connect()
 

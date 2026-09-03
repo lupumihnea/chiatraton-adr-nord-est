@@ -37,7 +37,9 @@ def _local_application_service(
     if settings.repository_backend != "memory":
         raise ValueError("An external repository adapter must be injected at the composition root")
     if settings.document_storage_backend != "memory":
-        raise ValueError("An external document-storage adapter must be injected at the composition root")
+        raise ValueError(
+            "An external document-storage adapter must be injected at the composition root"
+        )
     if settings.job_runner_backend != "local":
         raise ValueError("An external job-runner adapter must be injected at the composition root")
     if settings.criterion_extractor_backend == "external" and criterion_extractor is None:

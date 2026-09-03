@@ -735,24 +735,43 @@ components:
     ProjectCreate:
       type: object
       additionalProperties: false
-      required: [name, completionDate, monitoringEndDate]
+      required: [name]
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 200
-        completionDate:
-          type: string
-          format: date
-        monitoringEndDate:
-          type: string
-          format: date
-          description: Dată contractuală explicită, nu valoare calculată de API.
+        smisCode:
+          description: Codul SMIS din șase cifre, dacă proiectul provine din MySMIS/MyADR.
+          anyOf:
+            - type: string
+              pattern: '^[0-9]{6}$'
+            - type: 'null'
+        fundingCallId:
+          description: Identificatorul numeric al apelului de finanțare, dacă este disponibil.
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        beneficiaryName:
+          description: Numele beneficiarului, păstrat ca metadată de proiect.
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: 'null'
 
     Project:
       type: object
       additionalProperties: false
-      required: [id, name, completionDate, monitoringEndDate, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - smisCode
+        - fundingCallId
+        - beneficiaryName
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -761,13 +780,22 @@ components:
           type: string
           minLength: 1
           maxLength: 200
-        completionDate:
-          type: string
-          format: date
-        monitoringEndDate:
-          type: string
-          format: date
-          description: Dată contractuală explicită, nu valoare calculată de API.
+        smisCode:
+          anyOf:
+            - type: string
+              pattern: '^[0-9]{6}$'
+            - type: 'null'
+        fundingCallId:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        beneficiaryName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: 'null'
         createdAt:
           type: string
           format: date-time

@@ -10,6 +10,9 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DEFAULT_API_BASE_URL = "http://127.0.0.1:8000"
 
@@ -258,7 +261,6 @@ class ChIAtratonAPIClient:
             raise APIClientError("API-ul a returnat un document invalid.")
         return result
 
-
     async def create_criterion_extraction_job(
         self,
         project_id: str,
@@ -378,7 +380,6 @@ class ChIAtratonAPIClient:
             if not next_cursor:
                 return criteria
             cursor = str(next_cursor)
-
 
 
 api_client = ChIAtratonAPIClient.from_environment()

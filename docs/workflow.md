@@ -21,10 +21,8 @@ flowchart TD
     S1 --> U5[Utilizatorul verifică propunerile]
     U5 --> D1[UserDecision: confirmă, corectează sau respinge]
     D1 --> H1[API salvează raportul și istoricul fără suprascriere]
-    H1 --> E{Perioada raportului atinge monitoringEndDate?}
-    E -- Nu --> W[Așteaptă următorul Report]
+    H1 --> W[Așteaptă următorul Report]
     W --> U4
-    E -- Da --> C[Utilizatorul închide monitorizarea]
 ```
 
 ## 3. Inițializarea proiectului
@@ -59,9 +57,9 @@ flowchart TD
 
 ## 5. Continuitatea raportării
 
-Un proiect primește rapoarte periodice până la `monitoringEndDate`, data contractuală explicită înregistrată pe proiect. Aplicația poate reprezenta cadențe diferite: de exemplu, rapoarte trimestriale în implementare și rapoarte anuale post-implementare. Cadența nu schimbă regula de izolare a validărilor.
+Un proiect primește rapoarte periodice atât timp cât este activ. Aplicația poate reprezenta cadențe diferite: de exemplu, rapoarte trimestriale în implementare și rapoarte anuale post-implementare. Cadența nu schimbă regula de izolare a validărilor.
 
-La atingerea datei-limită, sistemul propune închiderea monitorizării, dar utilizatorul confirmă acțiunea. Orice abatere cerută de contract trebuie înregistrată explicit, nu ascunsă într-o valoare implicită.
+API-ul nu urmărește o dată de închidere a monitorizării; utilizatorul decide când proiectul nu mai primește rapoarte.
 
 ## 6. Istoric și reanalizare
 
@@ -95,3 +93,18 @@ stare este comun, iar câmpurile specifice tipului sunt păstrate separat.
 - Un batch de review-uri este atomic și idempotent; o revizie depășită sau o propunere deja revizuită produce conflict.
 - Eșecul ori reluarea extracției nu șterge propunerile și criteriile existente.
 - UI-ul nu ocolește API-ul pentru recuperare, editare sau finalizare.
+
+## 9. Flux operațional implementat pentru verificarea unui raport
+
+În MVP, ciclul unui raport este prezentat utilizatorului ca un task de verificare:
+
+1. Utilizatorul selectează raportul din lista task-urilor proiectului.
+2. Aplicația încarcă proiectul, raportul curent, documentele asociate și rapoartele anterioare.
+3. AI-ul stabilește aplicabilitatea fiecărui criteriu la perioada raportată.
+4. Pentru criteriile aplicabile, AI-ul compară raportul cu sursa criteriului, contractul/anexele și celelalte documente relevante, plus rapoartele periodice anterioare.
+5. UI-ul ascunde rezultatele `ok` și `not_applicable` și afișează numai excepțiile: neconcordanțe, informații lipsă, valori/date diferite, dovezi insuficiente, contradicții între rapoarte și cazuri care necesită analiză umană.
+6. Fiecare excepție este susținută prin `validation_sources`; modelul selectează ID-uri de evidence, iar textul/pagina sunt recuperate local din documente.
+7. Utilizatorul confirmă, corectează, respinge sau solicită clarificări, printr-o `UserDecision` append-only.
+8. Din constatările revizuite se generează o notă de verificare sau un draft de clarificare.
+9. Draftul poate fi copiat sau exportat pentru transfer manual în sistemul oficial.
+10. `AnalysisJob`, reviziile validărilor, deciziile și outputurile generate rămân în istoric.

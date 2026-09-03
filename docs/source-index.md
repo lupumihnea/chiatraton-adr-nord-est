@@ -41,9 +41,9 @@ Referințe de pagină relevante din manual: rapoarte trimestriale și indicatori
 
 | ID | Tensiune observată | Rezoluție pentru produs | Urmărire necesară |
 |---|---|---|---|
-| C-01 | Diagrama de workflow închide monitorizarea după 3 ani, dar durata nu este universală. | API-ul păstrează `monitoringEndDate` contractual explicit; nu se codează valoarea 3 și nu se calculează dintr-un `X` generic. | Validare per apel și contract înainte de producție. |
+| C-01 | Diagrama de workflow închide monitorizarea după 3 ani, dar durata nu este universală. | Rezolvat prin eliminare: API-ul nu mai păstrează o dată de închidere a monitorizării (`monitoringEndDate` a fost scoasă din contract pe 2026-09-03); utilizatorul decide manual când se închide monitorizarea. | — |
 | C-02 | Diagrama spune că utilizatorul verifică numai excepțiile; principiul de guvernanță cere decizie finală umană. | UI-ul poate prioritiza excepțiile, dar AI-ul nu creează `UserDecision`, iar un raport nu este finalizat prin acceptare AI implicită. | Teste de acceptare pentru finalizare și bulk review controlat. |
-| C-03 | Manualul descrie perioada post-implementare conform contractului și rapoarte anuale calculate de la plata finală, în timp ce proiectele pot folosi repere diferite. | Modelul păstrează separat `completionDate` și `monitoringEndDate`, aceasta din urmă fiind data contractuală explicită. | Data se verifică pentru fiecare proiect înainte de utilizarea operațională. |
+| C-03 | Manualul descrie perioada post-implementare conform contractului și rapoarte anuale calculate de la plata finală, în timp ce proiectele pot folosi repere diferite. | Rezolvat prin eliminare: `completionDate` și `monitoringEndDate` au fost scoase din `Project` pe 2026-09-03; produsul nu mai urmărește aceste date contractuale. | — |
 | C-04 | „Rapoarte periodice” este generic; manualul distinge progres trimestrial, raport final și durabilitate anuală. | `Report.reportType` și perioada/cadența sunt explicite. Același mecanism de validare se aplică fiecărui raport. | Catalogul final de tipuri se confirmă în contractul API. |
 | C-05 | Implementarea legacy folosește `obligations` și `references`, iar terminologia cerută este `Criterion` și `SourceAnchor`; lipsesc rapoarte și validări istorice. | Documentația și contractele noi folosesc terminologia canonică. Implementarea rămâne neschimbată în acest branch. | Migrare DB separată, coordonată cu Dragoș și Mihnea. |
 | C-06 | Instrucțiunile repository-ului menționează generic `Task`; cerința curentă cere `AnalysisJob`. | Pentru procesarea AI și contractele noi se folosește `AnalysisJob`. | Aliniere într-un change set separat dacă apare cod legacy cu `Task`. |
@@ -51,7 +51,6 @@ Referințe de pagină relevante din manual: rapoarte trimestriale și indicatori
 
 ## 5. Necunoscute controlate
 
-- Durata nu este universală în setul de surse; contractul individual stabilește `monitoringEndDate`.
 - Taxonomia completă a rezultatelor de validare și pragurile de încredere AI necesită confirmare de produs și evaluare pe date anonimizate.
 - Politica de retenție și ștergere a documentelor trebuie definită separat, cu cerințe juridice și de securitate.
 
