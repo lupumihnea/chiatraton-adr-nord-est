@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from DAO.references_DAO import ReferenceDAO
+from document import Document
 
 
 @dataclass
@@ -14,10 +15,10 @@ class Reference:
     subject:Optional[str]
 
     @staticmethod
-    def from_DAO(dao: ReferenceDAO, document_link: str) -> Reference:
-        link = document_link
+    def from_DAO(dao: ReferenceDAO, document:Document) -> Reference:
+        link = document.get_link()
         if dao.page is not None:
-            link = f"{document_link}#page={dao.page}"
+            link = f"{link}#page={dao.page}"
 
         return Reference(
             reference_id=dao.id,
