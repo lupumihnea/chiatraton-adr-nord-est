@@ -7,7 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.core.exceptions import OperationNotImplementedError, ProblemException
+from app.core.exceptions import ProblemException
 from app.core.request_context import request_id_from
 from app.models.errors import FieldError, ProblemDetails
 
@@ -84,18 +84,6 @@ def register_exception_handlers(app: FastAPI) -> None:
             title="Request validation failed",
             detail="One or more request fields are invalid.",
             errors=errors,
-        )
-
-    @app.exception_handler(OperationNotImplementedError)
-    async def unimplemented_handler(
-        request: Request, exc: OperationNotImplementedError
-    ) -> JSONResponse:
-        return problem_response(
-            request,
-            status=500,
-            code="internal_error",
-            title="Operation not implemented",
-            detail=f"Operation {exc.operation_id} is an explicit service stub in this release.",
         )
 
     @app.exception_handler(StarletteHTTPException)

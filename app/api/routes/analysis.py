@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Path, Query, status
+from fastapi import APIRouter, Path, Query, Response, status
 
 from app.api.dependencies import ApplicationServiceDep, CurrentUserDep, IdempotencyDep
 from app.api.responses import problem_responses, success_response
@@ -38,11 +38,14 @@ PageCursor = Annotated[str | None, Query(max_length=2048)]
 async def create_report_analysis_job(
     report_id: ReportId,
     data: AnalysisJobCreate,
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
 ) -> AnalysisJob:
-    return await service.create_report_analysis_job(report_id, data, user, idempotency)
+    job = await service.create_report_analysis_job(report_id, data, user, idempotency)
+    response.headers["Location"] = f"/api/v1/analysis-jobs/{job.id}"
+    return job
 
 
 @router.get(
@@ -103,8 +106,11 @@ async def list_criterion_extraction_proposals(
 async def create_criterion_proposal_reviews(
     job_id: JobId,
     data: CriterionProposalReviewBatch,
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
 ) -> CriterionProposalReviewBatchResult:
-    return await service.create_criterion_proposal_reviews(job_id, data, user, idempotency)
+    result = await service.create_criterion_proposal_reviews(job_id, data, user, idempotency)
+    response.headers["Location"] = f"/api/v1/criterion-extraction-jobs/{job_id}/proposals"
+    return result

@@ -3,7 +3,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, Path, Query, UploadFile, status
+from fastapi import APIRouter, File, Form, Path, Query, Response, UploadFile, status
 
 from app.api.dependencies import ApplicationServiceDep, CurrentUserDep, IdempotencyDep
 from app.api.responses import problem_responses, success_response
@@ -41,11 +41,14 @@ PageCursor = Annotated[str | None, Query(max_length=2048)]
 )
 async def create_project(
     data: ProjectCreate,
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
 ) -> Project:
-    return await service.create_project(data, user, idempotency)
+    project = await service.create_project(data, user, idempotency)
+    response.headers["Location"] = f"/api/v1/projects/{project.id}"
+    return project
 
 
 @router.get(
@@ -78,6 +81,7 @@ async def list_projects(
 async def upload_project_document(
     project_id: ProjectId,
     file: Annotated[UploadFile, File(description="PDF, DOC, DOCX, XLS sau XLSX; maximum 50 MiB.")],
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
@@ -85,7 +89,11 @@ async def upload_project_document(
         str | None, Form(alias="displayName", min_length=1, max_length=255)
     ] = None,
 ) -> Document:
-    return await service.upload_project_document(project_id, file, display_name, user, idempotency)
+    document = await service.upload_project_document(
+        project_id, file, display_name, user, idempotency
+    )
+    response.headers["Location"] = f"/api/v1/projects/{project_id}/documents/{document.id}"
+    return document
 
 
 @router.post(
@@ -102,11 +110,14 @@ async def upload_project_document(
 async def create_project_criterion(
     project_id: ProjectId,
     data: CriterionCreate,
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
 ) -> Criterion:
-    return await service.create_project_criterion(project_id, data, user, idempotency)
+    criterion = await service.create_project_criterion(project_id, data, user, idempotency)
+    response.headers["Location"] = f"/api/v1/projects/{project_id}/criteria/{criterion.id}"
+    return criterion
 
 
 @router.get(
@@ -140,11 +151,14 @@ async def list_project_criteria(
 async def create_criterion_extraction_job(
     project_id: ProjectId,
     data: CriterionExtractionJobCreate,
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
 ) -> AnalysisJob:
-    return await service.create_criterion_extraction_job(project_id, data, user, idempotency)
+    job = await service.create_criterion_extraction_job(project_id, data, user, idempotency)
+    response.headers["Location"] = f"/api/v1/analysis-jobs/{job.id}"
+    return job
 
 
 @router.post(
@@ -161,11 +175,14 @@ async def create_criterion_extraction_job(
 async def create_project_report(
     project_id: ProjectId,
     data: ReportCreate,
+    response: Response,
     user: CurrentUserDep,
     idempotency: IdempotencyDep,
     service: ApplicationServiceDep,
 ) -> Report:
-    return await service.create_project_report(project_id, data, user, idempotency)
+    report = await service.create_project_report(project_id, data, user, idempotency)
+    response.headers["Location"] = f"/api/v1/projects/{project_id}/reports/{report.id}"
+    return report
 
 
 @router.get(

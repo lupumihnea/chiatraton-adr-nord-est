@@ -10,7 +10,7 @@ DESCRIPTIONS = {
     415: "Tipul fișierului nu este acceptat.",
     422: "Cererea nu respectă schema sau regulile de business.",
     429: "Limita de cereri a fost depășită.",
-    500: "Eroare internă sau operație încă disponibilă doar ca stub.",
+    500: "Eroare internă neașteptată.",
     503: "Serviciul AI nu este disponibil.",
 }
 
