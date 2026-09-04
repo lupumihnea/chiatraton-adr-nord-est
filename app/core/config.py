@@ -54,6 +54,13 @@ class Settings(BaseSettings):
             "AI_MODEL_NAME", "CHIATRATON_AI_MODEL_NAME", "OPENROUTER_PAID_MODEL"
         ),
     )
+    ai_reviewer_model_name: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "AI_REVIEWER_MODEL_NAME",
+            "CHIATRATON_AI_REVIEWER_MODEL_NAME",
+        ),
+    )
     ai_base_url: str = Field(
         default="https://openrouter.ai/api/v1",
         validation_alias=AliasChoices(

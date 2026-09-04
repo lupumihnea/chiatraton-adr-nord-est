@@ -2,7 +2,8 @@
 
 PDF strategy:
 - PyMuPDF remains the canonical text source and fallback parser.
-- OpenDataLoader PDF is used when available for table structure / reading order.
+- OpenDataLoader PDF is used when available for table structure / reading order,
+  with optional local hybrid Docling routing for complex pages.
 - PyMuPDF ``find_tables`` is a deterministic fallback when OpenDataLoader or Java
   is unavailable.
 - scoring sections emitted as ``Tip: OPTIUNI`` are parsed deterministically so
@@ -10,7 +11,8 @@ PDF strategy:
   extraction. These sections are often visually list-like, not actual PDF
   tables, so a table parser alone cannot solve them.
 
-No cloud OCR or LLM is used here. The extracted wording remains local Romanian
+No cloud OCR or LLM is used here. Optional hybrid mode expects a local
+OpenDataLoader/Docling backend. The extracted wording remains local Romanian
 source text; only whitespace and table separators are normalized.
 """
 
@@ -247,6 +249,47 @@ def _walk_nodes(node: Any):
             yield from _walk_nodes(item)
 
 
+def _env_bool(name: str, *, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"", "0", "false", "no", "off"}
+
+
+def _opendataloader_hybrid_options() -> dict[str, Any]:
+    backend = os.getenv("CHIATRATON_PDF_OPENDATALOADER_HYBRID", "off").strip().lower()
+    if backend in {"", "0", "false", "no", "off"}:
+        return {}
+    if backend != "docling-fast":
+        raise RuntimeError("Unsupported OpenDataLoader hybrid backend")
+
+    mode = os.getenv("CHIATRATON_PDF_OPENDATALOADER_HYBRID_MODE", "auto").strip().lower()
+    if mode not in {"auto", "full"}:
+        raise RuntimeError("Unsupported OpenDataLoader hybrid mode")
+
+    options: dict[str, Any] = {
+        "hybrid": backend,
+        "hybrid_mode": mode,
+        "hybrid_fallback": _env_bool(
+            "CHIATRATON_PDF_OPENDATALOADER_HYBRID_FALLBACK", default=True
+        ),
+    }
+    url = os.getenv("CHIATRATON_PDF_OPENDATALOADER_HYBRID_URL", "").strip()
+    if url:
+        options["hybrid_url"] = url
+    timeout = os.getenv("CHIATRATON_PDF_OPENDATALOADER_HYBRID_TIMEOUT", "").strip()
+    if timeout:
+        options["hybrid_timeout"] = timeout
+    return options
+
+
+def _opendataloader_backend_label() -> str:
+    options = _opendataloader_hybrid_options()
+    if not options:
+        return "opendataloader"
+    return f"opendataloader+hybrid:{options['hybrid']}/{options['hybrid_mode']}"
+
+
 def _opendataloader_table_blocks(
     content: bytes, page_text_by_number: dict[int, str]
 ) -> dict[int, list[StructuredBlock]]:
@@ -270,14 +313,16 @@ def _opendataloader_table_blocks(
         output_dir = root / "out"
         output_dir.mkdir()
         input_path.write_bytes(content)
-        opendataloader_pdf.convert(
-            input_path=str(input_path),
-            output_dir=str(output_dir),
-            format="json",
-            table_method="cluster",
-            reading_order="xycut",
-            quiet=True,
-        )
+        convert_options = {
+            "input_path": str(input_path),
+            "output_dir": str(output_dir),
+            "format": "json",
+            "table_method": "cluster",
+            "reading_order": "xycut",
+            "quiet": True,
+        }
+        convert_options.update(_opendataloader_hybrid_options())
+        opendataloader_pdf.convert(**convert_options)
         json_files = sorted(output_dir.rglob("*.json"))
         if not json_files:
             raise RuntimeError("OpenDataLoader produced no JSON output")
@@ -336,28 +381,19 @@ _SUBCRITERION_RE = re.compile(
     r"Descriere subcriteriu:\s*(?P<context>.*?)\s*Tip:\s*OPTIUNI",
     re.IGNORECASE | re.DOTALL,
 )
-_HISTORICAL_SCORING = re.compile(
-    r"(rata\s+solvabilit|anul\s+fiscal\s+anterior|"
-    r"raportul\s+dintre\s+cuantumul\s+finanțării\s+nerambursabile.*cifra\s+de\s+afaceri|"
-    r"\bsold\s+(?:negativ|pozitiv))",
-    re.IGNORECASE | re.DOTALL,
-)
-_MONITORABLE_SCORING = re.compile(
-    r"(se\s+angajeaz|angajarea|locuri?\s+de\s+muncă|salariaț|defavorizat|"
-    r"mențin|monitorizare|până\s+la|contribuția\s+solicitantului|"
-    r"localizat|localizare|județ|sediul\s+social|"
-    r"investiția\s+(?:prevede|propune)|durabil|emisii|eficienț[aă]\s+din\s+punct\s+de\s+vedere)",
-    re.IGNORECASE,
-)
 
 
-def _selected_option_blocks(page_texts: list[str]) -> tuple[dict[int, list[StructuredBlock]], set[int]]:
-    """Parse MySMIS scoring alternatives and keep only explicit selections.
+def _selected_option_blocks(
+    page_texts: list[str],
+) -> tuple[dict[int, list[StructuredBlock]], set[int]]:
+    """Parse MySMIS scoring alternatives and keep every explicit selection.
 
     Context is carried across page boundaries because long option lists (e.g.
     contribution 11%-20%) continue on the next page. Semantic text may be
     normalized for the model, while ``source_text`` preserves a verbatim
-    contiguous substring from the originating PDF page.
+    contiguous substring from the originating PDF page. Whether a selected
+    option is actually a monitorable obligation is intentionally left to the
+    global obligation compiler rather than encoded as domain-specific regexes.
     """
     by_page: dict[int, list[StructuredBlock]] = {}
     option_pages: set[int] = set()
@@ -382,45 +418,38 @@ def _selected_option_blocks(page_texts: list[str]) -> tuple[dict[int, list[Struc
             local_context = current_context
             local_context_raw = current_context_raw
             local_context_page = current_context_page
+            local_context_match = None
             prior = [ctx for ctx in contexts if ctx.start() < match.start()]
             if prior:
                 context_match = prior[-1]
                 local_context = _clean_cell_text(context_match.group("context"))
                 local_context_raw = context_match.group("context").strip()
                 local_context_page = page_number
+                local_context_match = context_match
                 current_context = local_context
                 current_context_raw = local_context_raw
                 current_context_page = local_context_page
             if match.group("selected").lower() != "da":
                 continue
-            try:
-                score_value = float(match.group("score").replace(",", "."))
-            except ValueError:
-                score_value = 0.0
-            if score_value <= 0:
-                continue
-
             description_raw = match.group("description").strip()
             description = _clean_cell_text(description_raw)
             context = _clean_cell_text(local_context)
-            combined_context = f"{context} {description}".strip()
-            # Application-time financial measurements are evaluation facts, not
-            # future obligations.  Do this deterministically rather than asking
-            # the LLM to rediscover it each run.
-            if _HISTORICAL_SCORING.search(combined_context):
-                continue
-            if not _MONITORABLE_SCORING.search(combined_context):
-                continue
-
+            selected_source = match.group(0).strip()
             # For binary Da/Nu options the useful source wording is the
-            # subcriterion itself, not the isolated word "Da".
+            # subcriterion itself, plus the exact selected alternative/marker.
             if re.fullmatch(r"(?:[a-z]\.?\s*)?Da", description, re.IGNORECASE):
                 selected_text = context
-                source_text = local_context_raw
-                source_page_number = local_context_page or page_number
+                if local_context_match is not None and local_context_page == page_number:
+                    source_text = text[
+                        local_context_match.start("context") : match.end()
+                    ].strip()
+                    source_page_number = page_number
+                else:
+                    source_text = selected_source
+                    source_page_number = page_number
             else:
                 selected_text = description
-                source_text = description_raw
+                source_text = selected_source
                 source_page_number = page_number
             if not selected_text or not source_text:
                 continue
@@ -429,6 +458,7 @@ def _selected_option_blocks(page_texts: list[str]) -> tuple[dict[int, list[Struc
             # persisted as the obligation passage.
             block_text = (
                 f"{selected_text}\n"
+                f"Opțiune selectată: {description}\n"
                 f"Punctaj: {_clean_cell_text(match.group('score'))}; Selectată: Da"
             )
             by_page.setdefault(page_number, []).append(
@@ -469,7 +499,7 @@ def _pdf(document_id: UUID, content: bytes) -> ParsedDocument:
                 table_blocks = _opendataloader_table_blocks(
                     content, {number: text for number, text in base_pages}
                 )
-                table_backend = "opendataloader"
+                table_backend = _opendataloader_backend_label()
             except Exception:
                 if backend == "opendataloader":
                     # Explicit ODL mode still falls back instead of breaking a
@@ -478,8 +508,8 @@ def _pdf(document_id: UUID, content: bytes) -> ParsedDocument:
                     table_backend = "pymupdf-fallback"
         if not table_blocks:
             table_blocks = _pymupdf_table_blocks(pdf)
-            if table_backend == "opendataloader":
-                table_backend = "opendataloader+pymupdf-fallback"
+            if table_backend.startswith("opendataloader"):
+                table_backend = f"{table_backend}+pymupdf-fallback"
 
     text_by_number = {number: text for number, text in base_pages}
     max_page = max(text_by_number, default=0)
@@ -553,7 +583,11 @@ def _xlsx(document_id: UUID, content: bytes) -> ParsedDocument:
     for sheet in workbook.worksheets:
         rows: list[str] = []
         for row in sheet.iter_rows(values_only=True):
-            values = [str(value).strip() for value in row if value is not None and str(value).strip()]
+            values = [
+                str(value).strip()
+                for value in row
+                if value is not None and str(value).strip()
+            ]
             if values:
                 rows.append(" | ".join(values))
             if sum(len(item) for item in rows) >= 4500:
@@ -580,7 +614,11 @@ def _xls(document_id: UUID, content: bytes) -> ParsedDocument:
     for sheet in workbook.sheets():
         rows: list[str] = []
         for row_index in range(sheet.nrows):
-            values = [str(value).strip() for value in sheet.row_values(row_index) if str(value).strip()]
+            values = [
+                str(value).strip()
+                for value in sheet.row_values(row_index)
+                if str(value).strip()
+            ]
             if values:
                 rows.append(" | ".join(values))
             if sum(len(item) for item in rows) >= 4500:

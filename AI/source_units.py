@@ -14,7 +14,12 @@ class SourceUnit:
     text: str
 
 
-_BOUNDARY = re.compile(r"(?:\n{1,}|(?<=[.!?;:])\s+)")
+# Structural pointer boundaries only: this is not obligation-specific logic.
+# List bullets are boundaries too, so one paragraph can expose several exact,
+# independently groundable spans to the global compiler.
+_BOUNDARY = re.compile(
+    r"(?:\n{1,}|(?<=[.!?;:])\s+|\s+[•▪◦]\s*|\s+-\s+(?=[A-Za-zĂÂÎȘȚăâîșț]))"
+)
 
 
 def _trim_span(text: str, start: int, end: int) -> tuple[int, int]:

@@ -1,9 +1,10 @@
 # PDF parsing for AI obligation extraction
 
-The AI adapter uses a local, deterministic two-layer parser:
+The AI adapter uses a local, evidence-preserving parser:
 
 1. **OpenDataLoader PDF** is preferred for structured table extraction. JSON output is used so row/column relationships are preserved; `table_method="cluster"` is enabled for borderless/irregular tables.
 2. **PyMuPDF** remains the local text source and fallback. `Page.find_tables()` is used when OpenDataLoader or Java is unavailable.
+3. **OpenDataLoader Hybrid** can be enabled for table-heavy or OCR/layout-hard PDFs. Hybrid routes complex pages to a local Docling backend while keeping the same JSON/provenance flow.
 
 OpenDataLoader requires Java 11+ on `PATH`. On Windows verify once with:
 
@@ -20,15 +21,32 @@ $env:CHIATRATON_PDF_TABLE_BACKEND="opendataloader"  # preferred + safe fallback
 $env:CHIATRATON_PDF_TABLE_BACKEND="pymupdf"
 ```
 
+Hybrid is opt-in because it needs the local backend process:
+
+```powershell
+opendataloader-pdf-hybrid --port 5002
+
+$env:CHIATRATON_PDF_OPENDATALOADER_HYBRID="docling-fast"
+$env:CHIATRATON_PDF_OPENDATALOADER_HYBRID_MODE="auto"
+$env:CHIATRATON_PDF_OPENDATALOADER_HYBRID_URL="http://localhost:5002"
+$env:CHIATRATON_PDF_OPENDATALOADER_HYBRID_TIMEOUT="60000"
+```
+
+`CHIATRATON_PDF_OPENDATALOADER_HYBRID_FALLBACK` defaults to true, so a backend
+failure falls back through the existing parser path instead of blocking a demo
+workflow. Use `full` instead of `auto` only when you intentionally want every
+page routed to the backend.
+
 ## Why scoring alternatives need a separate parser
 
 MySMIS scoring pages such as `Tip: OPTIUNI` are often visually lists rather than PDF tables. A table parser alone cannot distinguish active and inactive alternatives reliably. ChIAtraton therefore parses these sections deterministically before the LLM:
 
 - only an option explicitly marked `Selectată: Da` may become an AI candidate;
 - `Selectată: Nu` alternatives never reach Qwen;
-- zero-point selections are ignored;
-- application-time financial facts such as solvency/RSG and prior-year turnover ratios are ignored because they are evaluation facts, not future monitoring obligations;
-- selected commitments such as employment/maintenance, disadvantaged-worker hiring, own contribution, project location, and concrete environmental measures are retained as candidates.
+- the candidate source includes the selected alternative and the exact selection
+  marker, so binary choices preserve the `Da` polarity;
+- semantic classification is left to the extraction reviewer, not to hardcoded
+  document-specific parser rules.
 
 On option pages the raw flattened PDF text is suppressed for obligation extraction so rejected alternatives cannot re-enter through semantic retrieval.
 

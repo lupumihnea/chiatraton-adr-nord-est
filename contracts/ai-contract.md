@@ -28,6 +28,8 @@ Adaptorul citește configurația injectată la pornire:
 
 - `AI_PROVIDER` - implicit logic `qwen`, fără cuplare în domeniu;
 - `AI_MODEL_NAME` - numele configurabil al modelului;
+- `AI_REVIEWER_MODEL_NAME` - opțional, model separat pentru review semantic și
+  compactarea duplicatelor; implicit se reutilizează `AI_MODEL_NAME`;
 - `AI_BASE_URL` - adresa configurabilă a serviciului;
 - `AI_API_KEY` - secret de runtime, niciodată în Git sau loguri;
 - `AI_TIMEOUT_SECONDS` - timeout-ul apelului;
@@ -106,6 +108,10 @@ Reguli obligatorii:
 Fiecare element din `proposals` trebuie să aibă cel puțin un `SourceAnchor`
 complet. Un element fără `documentId`, `pageNumber` pozitiv și `passage` nevid
 este respins ca `ai_invalid_response` și nu este persistat.
+
+`proposedDescription` este formularea atomică propusă de AI pentru obligația
+monitorizabilă. Nu este tratată ca citat. Citatele exacte rămân exclusiv în
+`sourceAnchors`, reconstruite local din pointerii modelului către source-units.
 
 Rezultatul AI este transformat în `CriterionProposal`, nu în `Criterion`.
 Identificatorul public, revizia și starea review-ului sunt atribuite de API, nu

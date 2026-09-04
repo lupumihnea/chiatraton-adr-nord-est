@@ -31,6 +31,7 @@ from app.models.domain import (
     CriterionProposalReviewBatchResult,
     CriterionProposalReviewRecord,
     CriterionValidation,
+    DecisionAction,
     Document,
     DocumentMediaType,
     PaginatedCriteria,
@@ -63,6 +64,21 @@ from app.services.ports import (
 MAX_DOCUMENT_BYTES = 52_428_800
 BASELINE_DOCUMENT_CATEGORIES = {"Documente legate de apel", "Documente inițiale"}
 NON_BASELINE_DOCUMENT_CATEGORIES = {"Rapoarte de progres", "Alte documente"}
+INITIAL_DOCUMENT_CATEGORY = "Documente inițiale"
+PROGRESS_REPORT_CATEGORY = "Rapoarte de progres"
+_REPORT_BLOCKING_STATUSES = {
+    ReportStatus.CREATED,
+    ReportStatus.ANALYSIS_QUEUED,
+    ReportStatus.ANALYSIS_IN_PROGRESS,
+    ReportStatus.ANALYSIS_FAILED,
+}
+_OUTCOME_LABELS = {
+    AIOutcome.COMPLIANT: "Îndeplinită",
+    AIOutcome.PARTIALLY_COMPLIANT: "Parțial îndeplinită",
+    AIOutcome.NON_COMPLIANT: "Neîndeplinită / neconformă",
+    AIOutcome.INSUFFICIENT_EVIDENCE: "Dovezi insuficiente",
+    AIOutcome.NOT_APPLICABLE: "Neaplicabilă perioadei",
+}
 T = TypeVar("T")
 
 
@@ -146,6 +162,61 @@ class DefaultApplicationService:
                     "Request validation failed",
                     "The SourceAnchor page exceeds the known document page count.",
                 )
+
+    async def _assert_progress_upload_allowed(
+        self, uow: UnitOfWork, project_id: UUID
+    ) -> None:
+        """Enforce baseline-first, sequential progress-report ingestion."""
+        documents = await uow.documents.list_for_project(project_id)
+        if not any(
+            document.display_name == INITIAL_DOCUMENT_CATEGORY for document in documents
+        ):
+            raise _problem(
+                409,
+                "initial_documents_required",
+                "Initial project documents required",
+                "Încarcă mai întâi documentele inițiale ale proiectului, de exemplu "
+                "cererea de finanțare, înainte de orice raport de progres.",
+            )
+
+        _snapshot_version, criteria = await uow.criteria.active_snapshot(project_id)
+        if not criteria:
+            raise _problem(
+                409,
+                "confirmed_baseline_required",
+                "Confirmed obligation baseline required",
+                "Confirmă mai întâi obligațiile extrase din documentele inițiale. "
+                "Rapoartele de progres pot fi încărcate numai după stabilirea baseline-ului.",
+            )
+
+        reports = await uow.reports.list_for_project(project_id)
+        blocking = [report for report in reports if report.status in _REPORT_BLOCKING_STATUSES]
+        if blocking:
+            blocking.sort(
+                key=lambda report: (report.period_end, report.created_at, str(report.id)),
+                reverse=True,
+            )
+            latest = blocking[0]
+            raise _problem(
+                409,
+                "previous_report_analysis_pending",
+                "Previous progress report analysis pending",
+                "Finalizează sau reîncearcă analiza raportului de progres anterior "
+                f"({latest.period_start.isoformat()} – {latest.period_end.isoformat()}) "
+                "înainte de a încărca următorul raport.",
+            )
+
+    async def _assert_confirmed_baseline(
+        self, uow: UnitOfWork, project_id: UUID
+    ) -> None:
+        _snapshot_version, criteria = await uow.criteria.active_snapshot(project_id)
+        if not criteria:
+            raise _problem(
+                409,
+                "confirmed_baseline_required",
+                "Confirmed obligation baseline required",
+                "Un raport de progres poate fi creat numai după confirmarea obligațiilor proiectului.",
+            )
 
     def _page(
         self, items: Sequence[T], limit: int, cursor: str | None, scope: str
@@ -252,6 +323,8 @@ class DefaultApplicationService:
         try:
             async with self._uow_factory() as uow:
                 await self._owned_project(uow, project_id, user)
+                if effective_name == PROGRESS_REPORT_CATEGORY:
+                    await self._assert_progress_upload_allowed(uow, project_id)
                 duplicate = await uow.documents.find_by_sha256(project_id, digest)
                 if duplicate is not None:
                     raise _problem(
@@ -486,6 +559,7 @@ class DefaultApplicationService:
                         "External report conflict",
                         "The external report identity is already used in this project.",
                     )
+            await self._assert_confirmed_baseline(uow, project_id)
             await uow.reports.add(report)
             await uow.commit()
         return report
@@ -708,27 +782,72 @@ class DefaultApplicationService:
                     revisions[item.criterion_id] = max(
                         revisions.get(item.criterion_id, 0), item.revision
                     )
-                validations = [
-                    CriterionValidation(
-                        id=uuid4(),
-                        report_id=report.id,
-                        criterion_id=candidate.criterion_id,
-                        criterion_version=candidate.criterion_version,
-                        analysis_job_id=current.id,
-                        revision=revisions.get(candidate.criterion_id, 0) + 1,
-                        status=(
-                            ValidationStatus.INSUFFICIENT_EVIDENCE
-                            if candidate.outcome == AIOutcome.INSUFFICIENT_EVIDENCE
-                            else ValidationStatus.AWAITING_USER_DECISION
-                        ),
-                        ai_outcome=candidate.outcome,
-                        ai_rationale=candidate.rationale,
-                        source_anchors=list(candidate.source_anchors),
-                        user_decision=None,
-                        created_at=_now(),
+
+                # CriterionValidation is the append-only state record for one
+                # criterion at one report. Resolve the latest prior state so an
+                # actual transition is also recorded explicitly. Human-corrected
+                # outcomes take precedence; rejected prior AI findings are ignored.
+                previous_outcomes: dict[UUID, AIOutcome] = {}
+                previous_reports: list[Report] = []
+                for previous_id in current.previous_report_ids:
+                    previous_report = await uow.reports.get(previous_id)
+                    if previous_report is not None:
+                        previous_reports.append(previous_report)
+                previous_reports.sort(
+                    key=lambda item: (item.period_end, item.created_at, str(item.id)),
+                    reverse=True,
+                )
+                for previous_report in previous_reports:
+                    previous_validations = await uow.validations.list_for_report(
+                        previous_report.id
                     )
-                    for candidate in candidates
-                ]
+                    latest_by_criterion: dict[UUID, CriterionValidation] = {}
+                    for item in previous_validations:
+                        latest = latest_by_criterion.get(item.criterion_id)
+                        if latest is None or item.revision > latest.revision:
+                            latest_by_criterion[item.criterion_id] = item
+                    for criterion_id, item in latest_by_criterion.items():
+                        if criterion_id in previous_outcomes:
+                            continue
+                        decision = await uow.validations.get_decision(item.id)
+                        if decision is not None and decision.action == DecisionAction.REJECT:
+                            continue
+                        previous_outcomes[criterion_id] = (
+                            decision.final_outcome
+                            if decision is not None and decision.final_outcome is not None
+                            else item.ai_outcome
+                        )
+
+                validations: list[CriterionValidation] = []
+                for candidate in candidates:
+                    rationale = candidate.rationale
+                    previous_outcome = previous_outcomes.get(candidate.criterion_id)
+                    if previous_outcome is not None and previous_outcome != candidate.outcome:
+                        rationale = (
+                            f"{rationale.rstrip()} Schimbare față de raportul anterior: "
+                            f"{_OUTCOME_LABELS[previous_outcome]} → "
+                            f"{_OUTCOME_LABELS[candidate.outcome]}."
+                        )[:8000]
+                    validations.append(
+                        CriterionValidation(
+                            id=uuid4(),
+                            report_id=report.id,
+                            criterion_id=candidate.criterion_id,
+                            criterion_version=candidate.criterion_version,
+                            analysis_job_id=current.id,
+                            revision=revisions.get(candidate.criterion_id, 0) + 1,
+                            status=(
+                                ValidationStatus.INSUFFICIENT_EVIDENCE
+                                if candidate.outcome == AIOutcome.INSUFFICIENT_EVIDENCE
+                                else ValidationStatus.AWAITING_USER_DECISION
+                            ),
+                            ai_outcome=candidate.outcome,
+                            ai_rationale=rationale,
+                            source_anchors=list(candidate.source_anchors),
+                            user_decision=None,
+                            created_at=_now(),
+                        )
+                    )
                 await uow.validations.add_many(validations)
                 await uow.jobs.update(
                     current.model_copy(

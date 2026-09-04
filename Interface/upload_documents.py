@@ -116,9 +116,9 @@ def upload_documents_page(project_id: str) -> None:
                 )
 
             ui.label(
-                "Documentele legate de apel și documentele inițiale pot genera propuneri "
-                "de obligații. Rapoartele de progres sunt verificate separat față de "
-                "obligațiile confirmate. Alte documente sunt păstrate ca documente suport."
+                "Ordinea este obligatorie: încarcă mai întâi documentele inițiale, "
+                "confirmă obligațiile propuse și abia apoi încarcă rapoarte de progres. "
+                "Fiecare raport este verificat față de toate obligațiile confirmate."
             ).classes("text-sm text-gray-600")
 
             ui.separator().classes("opacity-50")
@@ -337,6 +337,48 @@ def upload_documents_page(project_id: str) -> None:
                             ui.notify(period_error, type="warning", position="top")
                             return
 
+                    progress_rows = [
+                        row for row in pending if row["category"] == PROGRESS_REPORT_CATEGORY
+                    ]
+                    baseline_rows = [
+                        row
+                        for row in pending
+                        if row["category"] in OBLIGATION_SOURCE_CATEGORIES
+                    ]
+                    if progress_rows and baseline_rows:
+                        ui.notify(
+                            "Încarcă documentele inițiale și rapoartele de progres în etape "
+                            "separate: mai întâi baseline-ul și confirmarea obligațiilor, apoi raportul.",
+                            type="warning",
+                            position="top",
+                            timeout=10000,
+                        )
+                        return
+                    if len(progress_rows) > 1:
+                        ui.notify(
+                            "Încarcă rapoartele de progres pe rând. Analizează raportul curent "
+                            "înainte de a încărca următorul, pentru a păstra istoricul schimbărilor.",
+                            type="warning",
+                            position="top",
+                            timeout=10000,
+                        )
+                        return
+                    if progress_rows:
+                        try:
+                            confirmed = await api_client.list_all_project_criteria(project_id)
+                        except Exception as error:
+                            ui.notify(api_error_message(error), type="negative", timeout=10000)
+                            return
+                        if not confirmed:
+                            ui.notify(
+                                "Confirmă mai întâi obligațiile extrase din documentele inițiale. "
+                                "Raportul de progres nu poate fi primit înainte de baseline.",
+                                type="warning",
+                                position="top",
+                                timeout=10000,
+                            )
+                            return
+
                     submit_button.disable()
                     back_button.disable()
                     loading.set_visibility(True)
@@ -534,8 +576,8 @@ def upload_documents_page(project_id: str) -> None:
                             )
                             return
 
-                        # If only progress reports were uploaded, analyze immediately
-                        # once confirmed obligations already exist.
+                        # Progress reports are accepted one at a time and every accepted
+                        # report is analyzed immediately against all confirmed obligations.
                         if created_reports:
                             criteria = await api_client.list_all_project_criteria(project_id)
                             if not criteria:

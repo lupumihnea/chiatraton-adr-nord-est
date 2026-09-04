@@ -7,11 +7,13 @@ from app.core.config import DEVELOPMENT_JWT_SECRET, Settings
 def test_settings_are_loaded_from_environment(monkeypatch):
     monkeypatch.setenv("CHIATRATON_APP_VERSION", "1.2.3-test")
     monkeypatch.setenv("CHIATRATON_DOCS_ENABLED", "false")
+    monkeypatch.setenv("AI_REVIEWER_MODEL_NAME", "provider/reviewer-model")
 
     settings = Settings(_env_file=None)
 
     assert settings.app_version == "1.2.3-test"
     assert settings.docs_enabled is False
+    assert settings.ai_reviewer_model_name == "provider/reviewer-model"
 
 
 def test_production_rejects_development_jwt_secret():

@@ -114,16 +114,22 @@ $env:CHIATRATON_CRITERION_EXTRACTOR_BACKEND="qwen"
 $env:CHIATRATON_REPORT_ANALYZER_BACKEND="qwen"
 $env:AI_PROVIDER="qwen"
 $env:AI_MODEL_NAME="qwen/qwen3-235b-a22b-2507"
+# Opțional: un model separat, mai strict, pentru review și deduplicare.
+$env:AI_REVIEWER_MODEL_NAME="provider/reviewer-model"
 $env:AI_BASE_URL="https://openrouter.ai/api/v1"
 $secureKey = Read-Host "OpenRouter API key" -AsSecureString
 $env:AI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
 $env:AI_CONTRACT_VERSION="1.0"
 ```
 
-Modelul nu furnizează direct pasajele persistate. El returnează pointeri către
-source-units, iar adaptorul reconstruiește local pasajul exact și pagina înainte ca
-API-ul să creeze `CriterionProposal` sau `CriterionValidation`. Detalii în
-`docs/ai-implementation.md`.
+La extracția baseline, modelul formulează un statement atomic pentru propunere și
+returnează separat pointeri către source-units. Adaptorul reconstruiește local
+pasajele exacte și pagina înainte ca API-ul să creeze `CriterionProposal`.
+La analiza raportului, dovezile sunt reconstruite la fel pentru `CriterionValidation`.
+Stratul intern `AI.claim_engine` modelează aceste rezultate ca afirmații
+verificabile: statement formulat de AI, evidence exact din document, verificări
+independente și decizie deterministă. Detalii în `docs/ai-implementation.md` și
+`docs/verified-claim-engine.md`.
 
 ### Comportamentul AI pe categoriile existente
 
@@ -141,17 +147,29 @@ progres/verificare a obligației. Contractele și schema backend rămân neschim
 
 ### PDF-uri și tabele
 
-Parserul local păstrează structura tabelară înainte de retrieval/LLM:
+Parserul local păstrează structura tabelară înainte de LLM:
 
 1. `OpenDataLoader PDF` este încercat primul în modul implicit `auto`;
-2. dacă OpenDataLoader/Java nu este disponibil, se folosește `PyMuPDF find_tables()`;
-3. secțiunile MySMIS `Tip: OPTIUNI` sunt tratate separat și numai variantele explicit
-   `Selectată: Da` pot ajunge în pool-ul pentru extracția obligațiilor;
-4. alternativele `Selectată: Nu`, datele izolate și metricile istorice de evaluare sunt
-   filtrate înainte/după Qwen;
-5. reprezentarea semantică a unui rând (`Header: valoare | ...`) este separată de pasajul canonic: numai un substring exact recuperat din textul PyMuPDF poate deveni `SourceAnchor`;
-6. dacă un rând structurat nu poate fi mapat mecanic la textul canonic, acel rând sintetic nu ajunge la Qwen, iar pagina brută rămâne fallback;
-7. propunerile aproape identice sunt deduplicate fără pierderea `SourceAnchor`-urilor.
+2. opțional, OpenDataLoader poate fi rulat în modul Hybrid (`docling-fast`) pentru
+   pagini/tabele complexe, cu backend local;
+3. dacă OpenDataLoader/Java/backend-ul local nu este disponibil, se folosește
+   `PyMuPDF find_tables()`;
+4. secțiunile MySMIS `Tip: OPTIUNI` sunt tratate separat și numai variantele explicit
+   `Selectată: Da` pot ajunge în pool-ul pentru extracția obligațiilor, împreună
+   cu markerul exact al selecției;
+5. alternativele `Selectată: Nu` sunt excluse structural; datele izolate și
+   metricile istorice sunt clasificate de reviewer, fără reguli de conținut hardcodate;
+6. reprezentarea semantică a unui rând (`Header: valoare | ...`) este separată de pasajul canonic: numai un substring exact recuperat din textul PyMuPDF poate deveni `SourceAnchor`;
+7. dacă un rând structurat nu poate fi mapat mecanic la textul canonic, acel rând sintetic nu ajunge la Qwen, iar pagina brută rămâne fallback;
+8. propunerile duplicate sunt grupate fără pierderea `SourceAnchor`-urilor și fără
+   ca etapa de compactare să poată rescrie sau elimina claim-uri acceptate.
+
+Extracția obligațiilor nu mai folosește un singur apel global peste tot textul.
+Adaptorul rulează discovery cu ledger complet pentru fiecare source candidate,
+review semantic strict în batch-uri de cel mult 16 claim-uri și, la final, o
+compactare globală care numai grupează duplicatele. Fiecare claim trebuie să
+primească exact un verdict; răspunsurile incomplete sunt reîncercate și apoi
+respinse, nu publicate parțial.
 
 OpenDataLoader necesită Java 11+ și este inclus în extra-ul `ai`. Configurația implicită este:
 
@@ -160,6 +178,13 @@ $env:CHIATRATON_PDF_TABLE_BACKEND="auto"
 ```
 
 Poți forța `opendataloader` sau `pymupdf`. Detalii în `docs/pdf-parsing.md`.
+Pentru experimentul Hybrid local:
+
+```powershell
+opendataloader-pdf-hybrid --port 5002
+$env:CHIATRATON_PDF_OPENDATALOADER_HYBRID="docling-fast"
+$env:CHIATRATON_PDF_OPENDATALOADER_HYBRID_MODE="auto"
+```
 
 ## Matrice endpoint-uri
 
@@ -242,6 +267,7 @@ semantic multilingual E5 și apelează Qwen prin OpenRouter paid-only.
 - [Workflow](docs/workflow.md)
 - [Modelul de date](docs/data-model.md)
 - [Arhitectura](docs/architecture.md)
+- [Verified Claim Engine](docs/verified-claim-engine.md)
 
 Nu se publică fotografii realizate la ADR, date reale despre beneficiari, URL-uri interne
 sau alte informații sensibile.

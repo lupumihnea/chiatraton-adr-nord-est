@@ -15,7 +15,8 @@ flowchart LR
     RI --> SQLA[SQLite repository]
     RI -. viitor .-> PGA[PostgreSQL repository]
     APP --> AIC[AIClient]
-    AIC --> QW[Qwen adapter]
+    AIC --> GCE[Verified Claim Engine]
+    GCE --> QW[Qwen adapter]
 ```
 
 MyADR/MySMIS rămân sistemele oficiale pentru task-uri, priorități, distribuire, validare, autorizare și clarificări. În acest slice, ChIAtraton păstrează numai metadatele externe necesare trasabilității și nu execută acțiuni în aceste sisteme.
@@ -61,7 +62,11 @@ Implementarea inițială poate folosi SQLite. O implementare PostgreSQL trebuie 
 
 ### AIClient
 
-`AIClient` este singura poartă a aplicației către AI. Adaptorul Qwen mapează contractul intern la protocolul furnizorului. Contractul detaliat este în `contracts/ai-contract.md`.
+`AIClient` este singura poartă a aplicației către AI. Adaptorul Qwen mapează
+contractul intern la protocolul furnizorului, iar verificarea afirmațiilor
+rămâne într-un strat local, provider-agnostic. Direcția detaliată este descrisă
+în `docs/verified-claim-engine.md`; contractul extern rămâne în
+`contracts/ai-contract.md`.
 
 ## 4. Configurarea AI
 
@@ -81,10 +86,12 @@ Valorile reale, cheile și adresele interne nu se includ în Git. Configurația 
 2. Creează un `AnalysisJob` și o cerere `AIClient` fără date din alte proiecte.
 3. Adaptorul Qwen execută analiza.
 4. API-ul validează schema, cardinalitatea criteriilor și ancorele de sursă.
-5. Rezultatele valide sunt salvate ca `CriterionValidation` noi.
-6. UI-ul citește rezultatele prin API.
-7. Utilizatorul transmite `UserDecision` prin API.
-8. API-ul păstrează decizia și istoricul fără suprascriere între rapoarte.
+5. Arbiterul AI păstrează numai afirmațiile cu provenance exact și verificări
+   semantice suficiente pentru fluxul respectiv.
+6. Rezultatele valide sunt salvate ca `CriterionValidation` noi.
+7. UI-ul citește rezultatele prin API.
+8. Utilizatorul transmite `UserDecision` prin API.
+9. API-ul păstrează decizia și istoricul fără suprascriere între rapoarte.
 
 ## 6. Responsabilități
 
