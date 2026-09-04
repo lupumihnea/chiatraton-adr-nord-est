@@ -41,12 +41,15 @@ def latest_analyzed_report(reports: list[dict[str, Any]]) -> dict[str, Any] | No
 def obligation_progress(
     validation: dict[str, Any] | None,
 ) -> ObligationProgress:
-    """Collapse API outcomes and human review into three user-facing states."""
+    """Collapse API outcomes and human review into four user-facing states."""
     if not validation:
         return ObligationProgress(
-            state="no_progress",
-            label="Niciun progres",
-            detail="Obligația nu are o evaluare în ultimul raport analizat.",
+            state="unknown",
+            label="Necunoscut",
+            detail=(
+                "Obligația nu are o evaluare în ultimul raport analizat; "
+                "starea ei nu poate fi stabilită."
+            ),
             source_anchors=(),
             pending_review=False,
         )
@@ -65,8 +68,8 @@ def obligation_progress(
         comment = _clean(decision.get("comment"))
         if action == "reject":
             return ObligationProgress(
-                state="no_progress",
-                label="Niciun progres",
+                state="unknown",
+                label="Necunoscut",
                 detail=comment or "Constatarea AI a fost respinsă de utilizator.",
                 source_anchors=(),
                 pending_review=False,
@@ -79,14 +82,25 @@ def obligation_progress(
         state, label = "completed", "Finalizată"
     elif outcome == "partially_compliant":
         state, label = "partial", "Progres parțial"
-    else:
+    elif outcome == "non_compliant":
         state, label = "no_progress", "Niciun progres"
+    elif outcome == "not_applicable":
+        state, label = "unknown", "Neaplicabilă perioadei"
+    else:
+        state, label = "unknown", "Necunoscut"
+
+    if outcome == "insufficient_evidence":
+        detail = (
+            "Raportul nu conține suficiente dovezi pentru a stabili progresul. "
+            "Absența dovezilor nu înseamnă că obligația nu a fost realizată."
+        )
 
     if not detail:
         detail = {
             "completed": "Raportul indică îndeplinirea obligației.",
             "partial": "Raportul indică realizarea parțială a obligației.",
             "no_progress": "Raportul nu confirmă încă progres pentru această obligație.",
+            "unknown": "Raportul nu permite stabilirea stării acestei obligații.",
         }[state]
 
     return ObligationProgress(

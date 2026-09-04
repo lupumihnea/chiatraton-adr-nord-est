@@ -29,6 +29,13 @@ REPORT_STATUS_LABELS = {
 }
 
 PROGRESS_STYLES = {
+    "unknown": {
+        "icon": "help_outline",
+        "card": "border-sky-200 border-l-sky-500",
+        "panel": "bg-sky-50 border-sky-200",
+        "summary": "bg-sky-50 border-sky-200 text-sky-800",
+        "text": "text-sky-800",
+    },
     "no_progress": {
         "icon": "radio_button_unchecked",
         "card": "border-gray-200 border-l-gray-400",
@@ -491,6 +498,7 @@ async def project_details_page(project_id: str) -> None:
                                 ui.label(progress_error).classes("text-red-700 font-bold")
                             else:
                                 progress_counts = {
+                                    "unknown": 0,
                                     "no_progress": 0,
                                     "partial": 0,
                                     "completed": 0,
@@ -500,6 +508,7 @@ async def project_details_page(project_id: str) -> None:
 
                                 with ui.row().classes("w-full gap-2 flex-wrap mb-2"):
                                     for state, summary_label in (
+                                        ("unknown", "necunoscute"),
                                         ("no_progress", "fără progres"),
                                         ("partial", "în progres"),
                                         ("completed", "finalizate"),
