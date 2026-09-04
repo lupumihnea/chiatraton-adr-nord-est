@@ -70,7 +70,9 @@ async def project_details_page(project_id: str) -> None:
                     ui.button(
                         "Reîncearcă",
                         on_click=lambda: ui.navigate.to(f"/project/{project_id}"),
-                    ).props("no-caps")
+                    ).props("push rounded size=md color=primary no-caps").classes(
+                        "px-6 py-2 text-base font-extrabold shadow-xl hover:scale-105 transition-transform duration-200 text-gray-900"
+                    )
                 return
 
             if project is None:
@@ -257,10 +259,10 @@ async def project_details_page(project_id: str) -> None:
                                             "text-gray-500"
                                         )
                                         ui.label(
-                                            doc.get("displayName") or original_filename
+                                            original_filename
                                         ).classes("font-bold text-gray-800 break-all")
                                     if doc.get("displayName"):
-                                        ui.label(original_filename).classes(
+                                        ui.label(doc.get("displayName")).classes(
                                             "text-xs text-gray-500 break-all"
                                         )
                                     ui.button(
@@ -282,11 +284,6 @@ async def project_details_page(project_id: str) -> None:
                             ui.label("Obligații confirmate").classes(
                                 "text-2xl font-extrabold text-gray-800"
                             )
-                        ui.button(
-                            "Încarcă documente și extrage obligații",
-                            icon="document_scanner",
-                            on_click=lambda: ui.navigate.to(f"/upload/{project_id}"),
-                        ).props("outline rounded no-caps")
 
                     ui.label(
                         "Obligațiile provin din documentele legate de apel și din "
@@ -310,28 +307,35 @@ async def project_details_page(project_id: str) -> None:
                             with ui.card().classes(
                                 "w-full shadow-sm rounded-xl border border-green-100"
                             ):
-                                ui.label(str(criterion.get("code", ""))).classes(
-                                    "font-extrabold text-green-800"
+                                ui.label("Obligație").classes(
+                                    "font-extrabold text-green-700 uppercase tracking-wide text-xs mb-1"
                                 )
                                 ui.label(
                                     " ".join(str(criterion.get("description", "")).split())
-                                ).classes("text-gray-800")
+                                ).classes("text-gray-800 font-bold text-lg")
                                 deadline = criterion.get("deadline") or "Fără termen explicit"
                                 ui.label(f"Termen: {deadline}").classes(
-                                    "text-sm text-gray-600"
+                                    "text-sm text-gray-600 mb-2"
                                 )
                                 for anchor in criterion.get("sourceAnchors") or []:
                                     page_number = anchor.get("pageNumber", "?")
+                                    doc_id = anchor.get("documentId")
+                                    doc_name = "document.pdf"
+                                    if doc_id:
+                                        for d in documents:
+                                            if d.get("id") == doc_id:
+                                                doc_name = d.get("originalFilename") or "document.pdf"
+                                                break
+
                                     with ui.expansion(
-                                        f"Sursa obligației · pagina {page_number}",
+                                        f"{doc_name} · pagina {page_number}",
                                         icon="article",
-                                    ).classes("w-full"):
-                                        doc_id = anchor.get("documentId")
+                                    ).classes("w-full bg-gray-50 rounded-md border border-gray-100"):
                                         if doc_id:
                                             ui.button(
-                                                "Deschide documentul",
-                                                on_click=lambda did=doc_id: open_document(
-                                                    did, "document.pdf"
+                                                f"Deschide documentul",
+                                                on_click=lambda did=doc_id, name=doc_name: open_document(
+                                                    did, name
                                                 ),
                                             ).props(
                                                 "flat no-caps dense color=primary"
@@ -340,14 +344,14 @@ async def project_details_page(project_id: str) -> None:
                                             " ".join(
                                                 str(anchor.get("passage", "")).split()
                                             )
-                                        ).classes("whitespace-normal")
+                                        ).classes("whitespace-normal text-gray-700")
 
                 with ui.column().classes(
                     "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
-                    "border border-blue-100"
+                    "border border-yellow-100"
                 ):
                     with ui.row().classes("items-center gap-2"):
-                        ui.icon("timeline", size="sm").classes("text-blue-600")
+                        ui.icon("timeline", size="sm").classes("text-yellow-600")
                         ui.label("Rapoarte de progres").classes(
                             "text-2xl font-extrabold text-gray-800"
                         )
@@ -368,14 +372,14 @@ async def project_details_page(project_id: str) -> None:
                         for report in reports:
                             status = str(report.get("status", "created"))
                             with ui.card().classes(
-                                "w-full shadow-sm rounded-xl border border-blue-100"
+                                "w-full shadow-sm rounded-xl border border-yellow-100"
                             ):
                                 with ui.row().classes(
                                     "w-full items-center justify-between gap-3"
                                 ):
                                     with ui.column().classes("gap-1"):
                                         ui.label("Raport de progres").classes(
-                                            "font-extrabold text-blue-800"
+                                            "font-extrabold text-yellow-800"
                                         )
                                         ui.label(
                                             f"Perioadă: {report.get('periodStart', '?')} → "
@@ -390,7 +394,9 @@ async def project_details_page(project_id: str) -> None:
                                             "Analizează progresul",
                                             icon="psychology",
                                             on_click=lambda r=report: start_report_analysis(r),
-                                        ).props("no-caps")
+                                        ).props("push rounded size=md color=primary no-caps").classes(
+                                            "px-6 py-2 text-base font-extrabold shadow-lg hover:scale-105 transition-transform duration-200 text-gray-900"
+                                        )
                                         if not criteria:
                                             button.disable()
                                     elif status in {"awaiting_user_decision", "completed"}:
@@ -401,12 +407,14 @@ async def project_details_page(project_id: str) -> None:
                                                 f"/project/{project_id}/report-analysis/"
                                                 f"{r.get('id')}/results"
                                             ),
-                                        ).props("outline no-caps")
+                                        ).props("outline rounded size=sm color=primary no-caps").classes(
+                                            "px-4 py-1 text-sm font-bold hover:bg-gray-50"
+                                        )
                                     else:
                                         ui.label(
                                             "Analiza rulează în fundal; reîncarcă pagina "
                                             "pentru status."
-                                        ).classes("text-sm text-blue-700")
+                                        ).classes("text-sm text-yellow-700")
 
         await ui.context.client.connected(timeout=10.0)
         await load_after_connect()

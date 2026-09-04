@@ -144,12 +144,21 @@ async def report_analysis_page(project_id: str, report_id: str, job_id: str) -> 
             ui.notify("Decizia umană a fost salvată.", type="positive")
             await render_results()
 
+        async def open_document(document_id: str, fallback_name: str) -> None:
+            try:
+                content_bytes, filename = await api_client.get_document_content(document_id)
+            except Exception as error:
+                ui.notify(api_error_message(error), type="negative", timeout=8000)
+                return
+            ui.download(content_bytes, filename=filename or fallback_name)
+
         async def render_results() -> None:
             nonlocal show_all_results
             results_container.clear()
             try:
                 criteria = await api_client.list_all_project_criteria(project_id)
                 validations = await api_client.list_all_report_validations(report_id)
+                documents = await api_client.list_project_documents(project_id)
             except Exception as error:
                 with results_container:
                     ui.label(api_error_message(error)).classes("text-red-700 font-bold")
@@ -188,7 +197,9 @@ async def report_analysis_page(project_id: str, report_id: str, job_id: str) -> 
                         else "Arată toate obligațiile",
                         icon="filter_alt" if show_all_results else "visibility",
                         on_click=toggle_results,
-                    ).props("outline no-caps")
+                    ).props("outline rounded size=sm color=primary no-caps").classes(
+                        "px-4 py-1 font-bold hover:bg-gray-50"
+                    )
 
                 if not visible:
                     ui.label(
@@ -209,11 +220,11 @@ async def report_analysis_page(project_id: str, report_id: str, job_id: str) -> 
                     with ui.card().classes(
                         "w-full shadow-sm rounded-xl border border-yellow-100"
                     ):
-                        ui.label(_clean(criterion.get("code")) or "Obligație").classes(
-                            "font-extrabold text-gray-800"
+                        ui.label("Obligație").classes(
+                            "font-extrabold text-gray-500 uppercase tracking-wide text-xs mb-1"
                         )
                         ui.label(_clean(criterion.get("description"))).classes(
-                            "text-gray-800"
+                            "text-gray-800 font-bold text-lg"
                         )
                         deadline = criterion.get("deadline") or "Fără termen explicit"
                         ui.label(f"Termen obligație: {deadline}").classes(
@@ -331,17 +342,24 @@ async def report_analysis_page(project_id: str, report_id: str, job_id: str) -> 
                                         "Confirmă constatarea",
                                         icon="check",
                                         on_click=confirm_current,
-                                    ).props("no-caps")
+                                    ).props("push rounded size=sm color=primary no-caps").classes(
+                                        "font-extrabold shadow-sm hover:scale-105 text-gray-900 "
+                                        "transition-transform duration-200 px-3"
+                                    )
                                     ui.button(
                                         "Corectează",
                                         icon="edit",
                                         on_click=correct_current,
-                                    ).props("outline no-caps")
+                                    ).props("outline rounded size=sm no-caps").classes(
+                                        "font-bold hover:bg-gray-50 px-3 text-gray-800"
+                                    )
                                     ui.button(
                                         "Respinge",
                                         icon="close",
                                         on_click=reject_current,
-                                    ).props("outline no-caps color=negative")
+                                    ).props("flat rounded size=sm color=negative no-caps").classes(
+                                        "font-bold hover:bg-red-50 px-3"
+                                    )
 
         async def load_after_connect() -> None:
             if job_id != "results":

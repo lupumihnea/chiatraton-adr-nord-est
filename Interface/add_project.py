@@ -176,7 +176,7 @@ def add_project_page() -> None:
                     "Salvează Proiectul",
                     icon="check_circle",
                     on_click=save_project,
-                ).props("push rounded size=md color=primary").classes(
+                ).props("push rounded size=md color=primary no-caps").classes(
                     "px-6 py-2 text-base font-extrabold shadow-xl hover:scale-105 "
                     "transition-transform duration-200 text-gray-900"
                 )

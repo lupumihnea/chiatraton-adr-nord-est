@@ -30,3 +30,6 @@ Thumbs.db
 
 # Outputuri generate din rapoarte
 exports/
+
+# Local Dev Scripts
+start-dev.ps1

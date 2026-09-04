@@ -241,23 +241,23 @@ async def upload_documents_page(project_id: str) -> None:
                             )
 
                         report_period = ui.row().classes(
-                            "w-full items-center gap-3 bg-blue-50/70 border border-blue-100 "
+                            "w-full items-center gap-3 bg-yellow-50/70 border border-yellow-100 "
                             "rounded-xl p-3"
                         )
                         with report_period:
-                            ui.icon("date_range").classes("text-blue-600")
+                            ui.icon("date_range").classes("text-yellow-600")
                             ui.label("Perioada raportată").classes(
-                                "font-bold text-blue-900"
+                                "font-bold text-yellow-900"
                             )
                             start_input = ui.input("De la").props(
                                 "type=date outlined dense"
-                            ).classes("w-48")
+                            ).classes("w-40")
                             end_input = ui.input("Până la").props(
                                 "type=date outlined dense"
                             ).classes("w-48")
                             ui.label(
                                 "Este folosită numai pentru analiza progresului."
-                            ).classes("text-xs text-blue-800")
+                            ).classes("text-xs text-yellow-800")
                         report_period.set_visibility(False)
 
                         def category_changed(event: Any) -> None:
@@ -656,7 +656,7 @@ async def upload_documents_page(project_id: str) -> None:
                     "Trimite documentele",
                     icon="send",
                     on_click=submit_documents,
-                ).props("push rounded size=md color=primary").classes(
+                ).props("push rounded size=md color=primary no-caps").classes(
                     "px-6 py-2 text-base font-extrabold shadow-xl hover:scale-105 "
                     "transition-transform duration-200 text-gray-900"
                 )
