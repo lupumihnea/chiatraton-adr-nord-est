@@ -11,6 +11,7 @@ def test_long_running_pages_flush_before_network_work() -> None:
     assert "async def criteria_review_page" in criteria
     assert "await ui.context.client.connected(timeout=10.0)" in criteria
     assert "ui.timer(0.1, poll_job_after_connect" not in criteria
+    assert "return await api_client.list_all_project_documents(project_id)" in criteria
 
     assert "async def project_details_page" in project
     assert "await ui.context.client.connected(timeout=10.0)" in project

@@ -77,7 +77,7 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
             ui.download(content_bytes, filename=filename or fallback_name)
 
         async def load_documents() -> list[dict[str, Any]]:
-            return await api_client.list_project_documents(project_id)
+            return await api_client.list_all_project_documents(project_id)
 
         @ui.refreshable
         async def criteria_view() -> None:
@@ -334,9 +334,9 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                                 ).classes("w-full bg-gray-50 rounded-md border border-gray-100"):
                                     if doc_id:
                                         ui.button(
-                                            f"Deschide documentul",
-                                            on_click=lambda did=doc_id, name=doc_name: open_document(
-                                                did, name
+                                            "Deschide documentul",
+                                            on_click=lambda did=doc_id, name=doc_name: (
+                                                open_document(did, name)
                                             ),
                                         ).props(
                                             "flat no-caps dense color=primary"
