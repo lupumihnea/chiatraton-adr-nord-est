@@ -237,7 +237,7 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
             with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl"):
                 ui.label("Respinge propunerea").classes("text-xl font-extrabold")
                 ui.label(
-                    "Motivul ajută profilul demonstrativ să prioritizeze propunerile viitoare."
+                    "Motivul ajută la ajustarea evaluărilor viitoare."
                 ).classes("text-sm text-gray-600")
                 reason = ui.select(
                     REJECTION_REASON_OPTIONS,

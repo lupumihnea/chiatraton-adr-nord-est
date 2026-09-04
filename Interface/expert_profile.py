@@ -229,11 +229,17 @@ def learn_from_review(
         deadline_changed = old_deadline != new_deadline
 
         if deadline_changed:
-            learning = "Profil actualizat: termenele trebuie susținute explicit de sursă."
+            learning = (
+                "Preferința expertului a fost înregistrată: termenele trebuie "
+                "susținute explicit de sursă."
+            )
         elif description_changed:
-            learning = "Profil actualizat: formulările expertului vor fi prioritizate."
+            learning = (
+                "Preferința expertului a fost înregistrată: formulările apropiate "
+                "de sursă vor fi prioritizate."
+            )
         else:
-            learning = "Profil actualizat cu această corecție de structură."
+            learning = "Corecția a fost înregistrată pentru evaluările viitoare."
 
         updated = replace(
             profile,
@@ -257,7 +263,7 @@ def learn_from_review(
         }
         learning = reason_messages.get(
             rejection_reason or "",
-            "Profil actualizat cu motivul respingerii expertului.",
+            "Motivul respingerii a fost înregistrat pentru evaluările viitoare.",
         )
         updated = replace(
             profile,
