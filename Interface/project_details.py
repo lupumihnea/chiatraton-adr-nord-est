@@ -17,6 +17,7 @@ from Interface.api_client import (
     json_fingerprint,
 )
 from Interface.document_viewer import open_document_at_anchor
+from Interface.obligation_progress import latest_analyzed_report, obligation_progress
 
 REPORT_STATUS_LABELS = {
     "created": "Pregătit pentru analiză",
@@ -25,6 +26,30 @@ REPORT_STATUS_LABELS = {
     "awaiting_user_decision": "Progres analizat",
     "completed": "Finalizat",
     "analysis_failed": "Analiza a eșuat",
+}
+
+PROGRESS_STYLES = {
+    "no_progress": {
+        "icon": "radio_button_unchecked",
+        "card": "border-gray-200 border-l-gray-400",
+        "panel": "bg-gray-50 border-gray-200",
+        "summary": "bg-gray-50 border-gray-200 text-gray-700",
+        "text": "text-gray-700",
+    },
+    "partial": {
+        "icon": "timelapse",
+        "card": "border-amber-200 border-l-amber-500",
+        "panel": "bg-amber-50 border-amber-200",
+        "summary": "bg-amber-50 border-amber-200 text-amber-800",
+        "text": "text-amber-800",
+    },
+    "completed": {
+        "icon": "check_circle",
+        "card": "border-emerald-200 border-l-emerald-500",
+        "panel": "bg-emerald-50 border-emerald-200",
+        "summary": "bg-emerald-50 border-emerald-200 text-emerald-800",
+        "text": "text-emerald-800",
+    },
 }
 
 
@@ -115,6 +140,35 @@ async def project_details_page(project_id: str) -> None:
                 reports_error = api_error_message(error)
             else:
                 reports_error = None
+
+            latest_progress_report = latest_analyzed_report(reports)
+            progress_validations: list[dict[str, Any]] = []
+            progress_error: str | None = None
+            if latest_progress_report is not None:
+                try:
+                    progress_validations = await api_client.list_all_report_validations(
+                        str(latest_progress_report.get("id") or "")
+                    )
+                except Exception as error:
+                    progress_error = api_error_message(error)
+
+            validation_by_criterion = {
+                str(validation.get("criterionId")): validation
+                for validation in progress_validations
+                if validation.get("criterionId")
+            }
+            progress_by_criterion = {
+                str(criterion.get("id")): obligation_progress(
+                    validation_by_criterion.get(str(criterion.get("id")))
+                )
+                for criterion in criteria
+                if criterion.get("id")
+            }
+            document_by_id = {
+                str(document.get("id")): document
+                for document in documents
+                if document.get("id")
+            }
 
             loading.set_visibility(False)
             content.clear()
@@ -266,11 +320,6 @@ async def project_details_page(project_id: str) -> None:
                                     )
 
                 qa_messages: list[dict[str, Any]] = []
-                document_by_id = {
-                    str(document.get("id")): document
-                    for document in documents
-                    if document.get("id")
-                }
                 with ui.column().classes(
                     "w-full max-w-6xl bg-white shadow-xl rounded-[1.5rem] p-6 "
                     "border border-yellow-100"
@@ -395,8 +444,8 @@ async def project_details_page(project_id: str) -> None:
                             )
 
                     ui.label(
-                        "Obligațiile provin din documentele legate de apel și din "
-                        "documentele inițiale ale proiectului."
+                        "Obligațiile confirmate și starea lor conform celui mai recent "
+                        "raport de progres analizat."
                     ).classes("text-sm text-gray-600")
                     ui.separator().classes("my-3 opacity-50")
 
@@ -409,17 +458,86 @@ async def project_details_page(project_id: str) -> None:
                             "apoi confirmă/corectează/respinge propunerile AI."
                         ).classes("text-gray-600")
                     else:
-                        ui.label(f"{len(criteria)} obligații confirmate").classes(
-                            "font-bold text-green-700 mb-2"
-                        )
-                        for criterion in criteria:
-                            with ui.card().classes(
-                                "w-full shadow-sm rounded-xl border border-green-100"
+                        if latest_progress_report is None:
+                            with ui.row().classes(
+                                "w-full items-center gap-2 p-3 rounded-lg border "
+                                "border-gray-200 bg-gray-50 text-gray-700 mb-2"
                             ):
-                                ui.label("Obligație").classes(
-                                    "font-extrabold text-green-700 uppercase tracking-wide "
-                                    "text-xs mb-1"
-                                )
+                                ui.icon("history_toggle_off", size="sm")
+                                ui.label(
+                                    "Nu există încă un raport de progres analizat."
+                                ).classes("font-bold")
+                        else:
+                            period_start = latest_progress_report.get("periodStart", "?")
+                            period_end = latest_progress_report.get("periodEnd", "?")
+                            with ui.row().classes(
+                                "w-full items-center justify-between gap-3 flex-wrap mb-2"
+                            ):
+                                with ui.column().classes("gap-0"):
+                                    ui.label("Stare la cel mai recent raport analizat").classes(
+                                        "font-extrabold text-gray-800"
+                                    )
+                                    ui.label(
+                                        f"Perioadă: {period_start} → {period_end}"
+                                    ).classes("text-sm text-gray-600")
+                                if latest_progress_report.get("status") == (
+                                    "awaiting_user_decision"
+                                ):
+                                    ui.badge("Evaluare AI de verificat", color="warning").props(
+                                        "outline"
+                                    )
+
+                            if progress_error:
+                                ui.label(progress_error).classes("text-red-700 font-bold")
+                            else:
+                                progress_counts = {
+                                    "no_progress": 0,
+                                    "partial": 0,
+                                    "completed": 0,
+                                }
+                                for progress in progress_by_criterion.values():
+                                    progress_counts[progress.state] += 1
+
+                                with ui.row().classes("w-full gap-2 flex-wrap mb-2"):
+                                    for state, summary_label in (
+                                        ("no_progress", "fără progres"),
+                                        ("partial", "în progres"),
+                                        ("completed", "finalizate"),
+                                    ):
+                                        style = PROGRESS_STYLES[state]
+                                        with ui.row().classes(
+                                            "items-center gap-2 px-3 py-2 rounded-lg border "
+                                            f"{style['summary']}"
+                                        ):
+                                            ui.icon(style["icon"], size="xs")
+                                            ui.label(
+                                                f"{progress_counts[state]} {summary_label}"
+                                            ).classes("text-sm font-bold")
+
+                        for criterion in criteria:
+                            criterion_id = str(criterion.get("id") or "")
+                            progress = progress_by_criterion.get(
+                                criterion_id, obligation_progress(None)
+                            )
+                            progress_style = PROGRESS_STYLES[progress.state]
+                            with ui.card().classes(
+                                "w-full shadow-sm rounded-lg border border-l-4 "
+                                f"{progress_style['card']}"
+                            ):
+                                with ui.row().classes(
+                                    "w-full items-start justify-between gap-3 flex-wrap"
+                                ):
+                                    ui.label("Obligație").classes(
+                                        "font-extrabold text-gray-500 uppercase tracking-wide "
+                                        "text-xs"
+                                    )
+                                    with ui.row().classes(
+                                        f"items-center gap-1 {progress_style['text']}"
+                                    ):
+                                        ui.icon(progress_style["icon"], size="xs")
+                                        ui.label(progress.label).classes(
+                                            "font-extrabold text-sm"
+                                        )
                                 ui.label(
                                     " ".join(str(criterion.get("description", "")).split())
                                 ).classes("text-gray-800 font-bold text-lg")
@@ -427,19 +545,81 @@ async def project_details_page(project_id: str) -> None:
                                 ui.label(f"Termen: {deadline}").classes(
                                     "text-sm text-gray-600 mb-2"
                                 )
-                                for anchor in criterion.get("sourceAnchors") or []:
+
+                                if progress_error:
+                                    ui.label(
+                                        "Starea din raport nu a putut fi încărcată."
+                                    ).classes("text-sm text-red-700 font-bold")
+                                else:
+                                    with ui.column().classes(
+                                        "w-full gap-1 p-3 rounded-lg border "
+                                        f"{progress_style['panel']}"
+                                    ):
+                                        with ui.row().classes(
+                                            "w-full items-center justify-between gap-2 flex-wrap"
+                                        ):
+                                            ui.label("Progres raportat").classes(
+                                                f"text-sm font-extrabold {progress_style['text']}"
+                                            )
+                                            if progress.pending_review:
+                                                ui.badge(
+                                                    "De verificat", color="warning"
+                                                ).props("outline")
+                                        progress_detail = progress.detail
+                                        if latest_progress_report is None:
+                                            progress_detail = (
+                                                "Starea va fi actualizată după analiza primului "
+                                                "raport de progres."
+                                            )
+                                        ui.label(progress_detail).classes(
+                                            "text-sm text-gray-700 whitespace-normal"
+                                        )
+
+                                        for index, anchor in enumerate(
+                                            progress.source_anchors, start=1
+                                        ):
+                                            doc_id = str(anchor.get("documentId") or "")
+                                            document = document_by_id.get(doc_id, {})
+                                            doc_name = str(
+                                                document.get("originalFilename")
+                                                or "document.pdf"
+                                            )
+                                            page_number = int(
+                                                anchor.get("pageNumber") or 1
+                                            )
+                                            passage = str(anchor.get("passage") or "")
+                                            if doc_id:
+                                                ui.button(
+                                                    f"Dovadă progres {index} · pagina "
+                                                    f"{page_number}",
+                                                    icon="open_in_new",
+                                                    on_click=lambda did=doc_id, name=doc_name,
+                                                    page=page_number,
+                                                    text=passage: open_document_at_anchor(
+                                                        did,
+                                                        name,
+                                                        page_number=page,
+                                                        passage=text,
+                                                    ),
+                                                ).props(
+                                                    "flat dense no-caps color=primary"
+                                                ).classes("self-start px-0 text-sm")
+
+                                source_anchors = criterion.get("sourceAnchors") or []
+                                if source_anchors:
+                                    ui.label("Sursa obligației").classes(
+                                        "text-xs font-bold text-gray-500 uppercase mt-1"
+                                    )
+                                for anchor in source_anchors:
                                     page_number = anchor.get("pageNumber", "?")
                                     doc_id = anchor.get("documentId")
                                     passage = str(anchor.get("passage", ""))
                                     doc_name = "document.pdf"
                                     if doc_id:
-                                        for d in documents:
-                                            if d.get("id") == doc_id:
-                                                doc_name = (
-                                                    d.get("originalFilename")
-                                                    or "document.pdf"
-                                                )
-                                                break
+                                        document = document_by_id.get(str(doc_id), {})
+                                        doc_name = (
+                                            document.get("originalFilename") or "document.pdf"
+                                        )
 
                                     with ui.expansion(
                                         f"{doc_name} · pagina {page_number}",
