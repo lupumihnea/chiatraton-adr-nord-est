@@ -156,6 +156,59 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '500':
           $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Documents]
+      operationId: listProjectDocuments
+      summary: Listează documentele proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Pagină de documente.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocuments'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/documents/{documentId}/content:
+    get:
+      tags: [Documents]
+      operationId: getDocumentContent
+      summary: Descarcă conținutul binar al unui document.
+      parameters:
+        - $ref: '#/components/parameters/DocumentId'
+      responses:
+        '200':
+          description: Conținutul documentului.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/projects/{projectId}/criteria:
     post:
@@ -574,6 +627,13 @@ components:
       schema:
         type: string
         format: uuid
+    DocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     JobId:
       name: jobId
       in: path
@@ -735,24 +795,43 @@ components:
     ProjectCreate:
       type: object
       additionalProperties: false
-      required: [name, completionDate, monitoringEndDate]
+      required: [name]
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 200
-        completionDate:
-          type: string
-          format: date
-        monitoringEndDate:
-          type: string
-          format: date
-          description: Dată contractuală explicită, nu valoare calculată de API.
+        smisCode:
+          description: Codul SMIS din șase cifre, dacă proiectul provine din MySMIS/MyADR.
+          anyOf:
+            - type: string
+              pattern: '^[0-9]{6}$'
+            - type: 'null'
+        fundingCallId:
+          description: Identificatorul numeric al apelului de finanțare, dacă este disponibil.
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        beneficiaryName:
+          description: Numele beneficiarului, păstrat ca metadată de proiect.
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: 'null'
 
     Project:
       type: object
       additionalProperties: false
-      required: [id, name, completionDate, monitoringEndDate, createdAt, updatedAt]
+      required:
+        - id
+        - name
+        - smisCode
+        - fundingCallId
+        - beneficiaryName
+        - createdAt
+        - updatedAt
       properties:
         id:
           type: string
@@ -761,13 +840,22 @@ components:
           type: string
           minLength: 1
           maxLength: 200
-        completionDate:
-          type: string
-          format: date
-        monitoringEndDate:
-          type: string
-          format: date
-          description: Dată contractuală explicită, nu valoare calculată de API.
+        smisCode:
+          anyOf:
+            - type: string
+              pattern: '^[0-9]{6}$'
+            - type: 'null'
+        fundingCallId:
+          anyOf:
+            - type: integer
+              minimum: 1
+            - type: 'null'
+        beneficiaryName:
+          anyOf:
+            - type: string
+              minLength: 1
+              maxLength: 200
+            - type: 'null'
         createdAt:
           type: string
           format: date-time
@@ -1656,6 +1744,20 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Project'
+        nextCursor:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 2048
+
+    PaginatedDocuments:
+      type: object
+      additionalProperties: false
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
         nextCursor:
           type: [string, 'null']
           minLength: 1

@@ -14,6 +14,42 @@ from tests.api.test_complete_workflow import (
 )
 
 
+def test_project_ui_metadata_round_trips_without_breaking_legacy_projects(
+    client, auth_headers
+):
+    response = _post(
+        client,
+        auth_headers,
+        "/api/v1/projects",
+        "project-ui-metadata",
+        expected=201,
+        json={
+            "name": "Proiect sintetic UI",
+            "smisCode": "654321",
+            "fundingCallId": 42,
+            "beneficiaryName": "Organizație Sintetică Delta",
+        },
+    )
+    project = response.json()
+    assert project["smisCode"] == "654321"
+    assert project["fundingCallId"] == 42
+    assert project["beneficiaryName"] == "Organizație Sintetică Delta"
+
+    listed = client.get("/api/v1/projects", headers=auth_headers)
+    assert listed.status_code == 200
+    assert listed.json()["items"] == [project]
+
+    legacy = _create_project(
+        client,
+        auth_headers,
+        "project-without-ui-metadata",
+        "Proiect sintetic compatibil",
+    )
+    assert legacy["smisCode"] is None
+    assert legacy["fundingCallId"] is None
+    assert legacy["beneficiaryName"] is None
+
+
 def test_documents_criteria_and_report_project_boundaries(client, auth_headers):
     project_a = _create_project(client, auth_headers, "project-a", "Synthetic A")
     project_b = _create_project(client, auth_headers, "project-b", "Synthetic B")
@@ -105,7 +141,7 @@ def test_documents_criteria_and_report_project_boundaries(client, auth_headers):
     assert cross_project_report.json()["code"] == "validation_error"
 
 
-def test_report_primary_and_monitoring_period_rules(client, auth_headers):
+def test_report_requires_exactly_one_primary_document(client, auth_headers):
     project = _create_project(client, auth_headers)
     first = _upload(client, auth_headers, project["id"], "doc-1", "one.pdf", b"one")
     second = _upload(client, auth_headers, project["id"], "doc-2", "two.pdf", b"two")
@@ -127,21 +163,6 @@ def test_report_primary_and_monitoring_period_rules(client, auth_headers):
         },
     )
     assert two_primaries.json()["code"] == "validation_error"
-
-    after_monitoring = _post(
-        client,
-        auth_headers,
-        f"/api/v1/projects/{project['id']}/reports",
-        "after-monitoring",
-        expected=422,
-        json={
-            "reportType": "durability",
-            "periodStart": "2033-01-01",
-            "periodEnd": "2034-01-01",
-            "documents": [{"documentId": first["id"], "role": "main_report"}],
-        },
-    )
-    assert after_monitoring.json()["code"] == "validation_error"
 
 
 def test_proposal_review_batch_is_atomic_and_stale_revision_conflicts(client, auth_headers):
@@ -316,6 +337,46 @@ def test_invalid_fake_analysis_response_fails_job_and_report(settings, auth_head
             f"/api/v1/projects/{project['id']}/reports", headers=auth_headers
         ).json()["items"]
         assert reports[0]["status"] == "analysis_failed"
+
+
+def test_list_project_documents_and_download_content(client, auth_headers):
+    project = _create_project(client, auth_headers)
+    first_content = b"Synthetic document one. No beneficiary data."
+    second_content = b"Synthetic document two. No beneficiary data."
+    first = _upload(
+        client, auth_headers, project["id"], "doc-list-1", "one.pdf", first_content
+    )
+    second = _upload(
+        client, auth_headers, project["id"], "doc-list-2", "two.pdf", second_content
+    )
+
+    listed = client.get(
+        f"/api/v1/projects/{project['id']}/documents", headers=auth_headers
+    )
+    assert listed.status_code == 200
+    items = listed.json()["items"]
+    assert {item["id"] for item in items} == {first["id"], second["id"]}
+    assert {item["originalFilename"] for item in items} == {"one.pdf", "two.pdf"}
+
+    other_project = _create_project(client, auth_headers, key="doc-list-other-project")
+    other_listed = client.get(
+        f"/api/v1/projects/{other_project['id']}/documents", headers=auth_headers
+    )
+    assert other_listed.json()["items"] == []
+
+    content_response = client.get(
+        f"/api/v1/documents/{first['id']}/content", headers=auth_headers
+    )
+    assert content_response.status_code == 200
+    assert content_response.content == first_content
+    assert content_response.headers["content-type"] == "application/pdf"
+    assert "one.pdf" in content_response.headers["content-disposition"]
+
+    missing = client.get(
+        "/api/v1/documents/00000000-0000-4000-8000-000000000000/content",
+        headers=auth_headers,
+    )
+    assert missing.status_code == 404
 
 
 def test_empty_report_context_auto_selects_baseline_and_previous_reports(client, auth_headers):

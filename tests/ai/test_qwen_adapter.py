@@ -19,7 +19,6 @@ from app.models.domain import (  # noqa: E402
     ReportDocumentRole,
     ReportStatus,
     ReportType,
-    SourceAnchor,
 )
 from app.services.ports import (  # noqa: E402
     AIInputDocument,
@@ -116,7 +115,10 @@ async def test_qwen_adapter_uses_exact_local_source_text(monkeypatch):
     report_document_id = uuid4()
     now = datetime.now(UTC)
 
-    source_text = "Beneficiarul va menține trei locuri de muncă până la 30.06.2031.\nAlt text."
+    expected_source_text = (
+        "Beneficiarul va menține trei locuri de muncă până la 30.06.2031."
+    )
+    source_text = f"{expected_source_text}\nAlt text."
     report_text = "Raportul declară doar două locuri de muncă menținute în perioada analizată."
 
     source_document = Document(

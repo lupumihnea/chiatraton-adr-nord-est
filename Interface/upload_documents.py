@@ -17,11 +17,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from nicegui import events, ui
+from nicegui import app, events, ui
 
 from Interface.api_client import (
-    APIUnavailableError,
+    APIProblemError,
     APITimeoutError,
+    APIUnavailableError,
     IdempotencyKeyManager,
     api_client,
     api_error_message,
@@ -89,7 +90,7 @@ def _valid_report_period(row: dict[str, Any]) -> str | None:
 
 
 @ui.page("/upload/{project_id}")
-def upload_documents_page(project_id: str) -> None:
+async def upload_documents_page(project_id: str) -> None:
     ui.colors(primary="#ffcc00", accent="#ffcc00")
 
     upload_state: list[dict[str, Any]] = []
@@ -111,7 +112,7 @@ def upload_documents_page(project_id: str) -> None:
         ):
             with ui.row().classes("items-center gap-3 mb-2"):
                 ui.icon("cloud_upload", size="md").classes("text-yellow-600")
-                ui.label(f"Încărcare documente - Proiect {project_id}").classes(
+                header_label = ui.label(f"Încărcare documente - Proiect {project_id}").classes(
                     "text-2xl font-extrabold text-gray-800 break-all"
                 )
 
@@ -240,33 +241,29 @@ def upload_documents_page(project_id: str) -> None:
                             )
 
                         report_period = ui.row().classes(
-                            "w-full items-center gap-3 bg-blue-50/70 border border-blue-100 "
+                            "w-full items-center gap-3 bg-yellow-50/70 border border-yellow-100 "
                             "rounded-xl p-3"
                         )
                         with report_period:
-                            ui.icon("date_range").classes("text-blue-600")
+                            ui.icon("date_range").classes("text-yellow-600")
                             ui.label("Perioada raportată").classes(
-                                "font-bold text-blue-900"
+                                "font-bold text-yellow-900"
                             )
                             start_input = ui.input("De la").props(
                                 "type=date outlined dense"
-                            ).classes("w-48")
+                            ).classes("w-40")
                             end_input = ui.input("Până la").props(
                                 "type=date outlined dense"
                             ).classes("w-48")
                             ui.label(
                                 "Este folosită numai pentru analiza progresului."
-                            ).classes("text-xs text-blue-800")
+                            ).classes("text-xs text-yellow-800")
                         report_period.set_visibility(False)
 
                         def category_changed(event: Any) -> None:
                             value = event.value
                             category = str(value) if value in CATEGORY_OPTIONS else None
                             row_data["category"] = category
-                            print(
-                                f"[UI] category changed: {category!r}",
-                                flush=True,
-                            )
                             report_period.set_visibility(
                                 category == PROGRESS_REPORT_CATEGORY
                             )
@@ -348,7 +345,8 @@ def upload_documents_page(project_id: str) -> None:
                     if progress_rows and baseline_rows:
                         ui.notify(
                             "Încarcă documentele inițiale și rapoartele de progres în etape "
-                            "separate: mai întâi baseline-ul și confirmarea obligațiilor, apoi raportul.",
+                            "separate: mai întâi baseline-ul și confirmarea obligațiilor, "
+                            "apoi raportul.",
                             type="warning",
                             position="top",
                             timeout=10000,
@@ -357,7 +355,8 @@ def upload_documents_page(project_id: str) -> None:
                     if len(progress_rows) > 1:
                         ui.notify(
                             "Încarcă rapoartele de progres pe rând. Analizează raportul curent "
-                            "înainte de a încărca următorul, pentru a păstra istoricul schimbărilor.",
+                            "înainte de a încărca următorul, pentru a păstra istoricul "
+                            "schimbărilor.",
                             type="warning",
                             position="top",
                             timeout=10000,
@@ -396,10 +395,6 @@ def upload_documents_page(project_id: str) -> None:
                                 )
                             row_data["category"] = category
                             display_name = CATEGORY_OPTIONS[category]
-                            print(
-                                f"[UI] submit document: {filename!r}, category={category!r}",
-                                flush=True,
-                            )
                             fingerprint = upload_fingerprint(
                                 project_id=project_id,
                                 filename=filename,
@@ -419,6 +414,49 @@ def upload_documents_page(project_id: str) -> None:
                                     display_name=display_name,
                                     idempotency_key=idempotency_key,
                                 )
+                            except APIProblemError as error:
+                                if error.problem.code == "document_duplicate":
+                                    # Same file (identical content) already exists in
+                                    # this project. Not a fatal error: skip it and keep
+                                    # going with the rest of the batch, since re-running
+                                    # extraction on an unchanged document is a common,
+                                    # intentional thing to try (e.g. re-testing).
+                                    row_data["completed"] = True
+                                    status_label = row_data["status_label"]
+                                    if status_label is not None:
+                                        status_label.text = "Deja încărcat"
+                                        status_label.classes(
+                                            replace=(
+                                                "text-xs font-bold text-yellow-700 "
+                                                "uppercase tracking-wide"
+                                            )
+                                        )
+                                    ui.notify(
+                                        f"„{filename}” este deja încărcat în acest "
+                                        "proiect; se sare peste el.",
+                                        type="info",
+                                        position="top",
+                                    )
+                                    continue
+                                message = api_error_message(error)
+                                error_label.text = message
+                                error_label.set_visibility(True)
+                                status_label = row_data["status_label"]
+                                if status_label is not None:
+                                    status_label.text = "Eroare"
+                                    status_label.classes(
+                                        replace=(
+                                            "text-xs font-bold text-red-700 "
+                                            "uppercase tracking-wide"
+                                        )
+                                    )
+                                ui.notify(
+                                    message,
+                                    type="negative",
+                                    position="top",
+                                    timeout=8000,
+                                )
+                                return
                             except Exception as error:
                                 message = api_error_message(error)
                                 error_label.text = message
@@ -451,6 +489,16 @@ def upload_documents_page(project_id: str) -> None:
                             if status_label is not None:
                                 status_label.text = "Încărcat"
                             uploaded += 1
+
+                        if uploaded == 0:
+                            ui.notify(
+                                "Toate documentele selectate erau deja încărcate în acest "
+                                "proiect; nu e nimic nou de procesat.",
+                                type="warning",
+                                position="top",
+                                timeout=10000,
+                            )
+                            return
 
                         report_rows = [
                             row
@@ -564,6 +612,10 @@ def upload_documents_page(project_id: str) -> None:
                                 ui.navigate.to(f"/project/{project_id}")
                                 return
 
+                            pending_jobs = getattr(app, "pending_extraction_jobs", {})
+                            pending_jobs[project_id] = job_id
+                            app.pending_extraction_jobs = pending_jobs
+
                             if created_reports:
                                 ui.notify(
                                     "Raportul/rapoartele de progres au fost salvate. "
@@ -593,7 +645,8 @@ def upload_documents_page(project_id: str) -> None:
                             if len(created_reports) > 1:
                                 ui.notify(
                                     "Rapoartele au fost salvate. Pentru a evita mai multe analize "
-                                    "Qwen simultane, pornește analiza fiecărui raport din pagina proiectului.",
+                                    "Qwen simultane, pornește analiza fiecărui raport din "
+                                    "pagina proiectului.",
                                     type="info",
                                     timeout=9000,
                                 )
@@ -647,7 +700,18 @@ def upload_documents_page(project_id: str) -> None:
                     "Trimite documentele",
                     icon="send",
                     on_click=submit_documents,
-                ).props("push rounded size=md color=primary").classes(
+                ).props("push rounded size=md color=primary no-caps").classes(
                     "px-6 py-2 text-base font-extrabold shadow-xl hover:scale-105 "
                     "transition-transform duration-200 text-gray-900"
                 )
+
+        async def _show_smis_code() -> None:
+            try:
+                project = await api_client.get_project(project_id)
+            except Exception:
+                return
+            if project and project.get("smisCode"):
+                header_label.text = f"Încărcare documente - Proiect {project['smisCode']}"
+
+        await ui.context.client.connected(timeout=10.0)
+        await _show_smis_code()

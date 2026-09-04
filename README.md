@@ -55,8 +55,8 @@ python -m Interface.main
 ```
 
 Interfața este disponibilă implicit la `http://127.0.0.1:8081`. Portul poate fi schimbat
-prin `CHIATRATON_UI_PORT`. UI-ul listează proiectele după nume și UUID, creează proiecte
-cu exact câmpurile contractuale și încarcă documente prin API; nu accesează direct
+prin `CHIATRATON_UI_PORT`. UI-ul caută proiectele după cod SMIS și păstrează UUID-ul
+pentru rutele API, creează proiecte cu exact câmpurile contractuale și încarcă documente prin API; nu accesează direct
 repository-uri, DAO-uri sau baza de date.
 
 Exemplu minimal:
@@ -68,8 +68,9 @@ $headers = @{
 }
 $body = @{
   name = "Synthetic monitoring project"
-  completionDate = "2030-12-31"
-  monitoringEndDate = "2033-12-31"
+  smisCode = "654321"
+  fundingCallId = 42
+  beneficiaryName = "Synthetic beneficiary"
 } | ConvertTo-Json
 Invoke-RestMethod http://127.0.0.1:8000/api/v1/projects `
   -Method Post -Headers $headers -ContentType application/json -Body $body
@@ -194,6 +195,8 @@ $env:CHIATRATON_PDF_OPENDATALOADER_HYBRID_MODE="auto"
 | POST | `/api/v1/projects` | funcțional, in-memory |
 | GET | `/api/v1/projects` | funcțional, cursor opac |
 | POST | `/api/v1/projects/{projectId}/documents` | funcțional, conținut in-memory separat |
+| GET | `/api/v1/projects/{projectId}/documents` | funcțional, cursor opac |
+| GET | `/api/v1/documents/{documentId}/content` | funcțional, `Content-Disposition: attachment` |
 | POST | `/api/v1/projects/{projectId}/criteria` | funcțional, cod unic și ancore validate |
 | GET | `/api/v1/projects/{projectId}/criteria` | funcțional, cursor opac |
 | POST | `/api/v1/projects/{projectId}/criterion-extraction-jobs` | funcțional, `202` + job local |

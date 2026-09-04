@@ -6,7 +6,7 @@ import asyncio
 from datetime import date
 from typing import Any
 
-from nicegui import ui
+from nicegui import app, ui
 
 from Interface.api_client import (
     IdempotencyKeyManager,
@@ -39,7 +39,9 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 "Înapoi la proiect",
                 icon="arrow_back",
                 on_click=lambda: ui.navigate.to(f"/project/{project_id}"),
-            ).props("flat rounded no-caps").classes("font-bold")
+            ).props("flat rounded no-caps size=md text-color=grey-8").classes(
+                "hover:bg-gray-100 px-4 py-2 rounded-full font-bold"
+            )
             ui.label("Extragere obligații").classes(
                 "text-2xl font-extrabold text-gray-800"
             )
@@ -65,6 +67,17 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
 
         async def load_criteria() -> list[dict[str, Any]]:
             return await api_client.list_all_project_criteria(project_id)
+            
+        async def open_document(document_id: str, fallback_name: str) -> None:
+            try:
+                content_bytes, filename = await api_client.get_document_content(document_id)
+            except Exception as error:
+                ui.notify(api_error_message(error), type="negative", timeout=8000)
+                return
+            ui.download(content_bytes, filename=filename or fallback_name)
+
+        async def load_documents() -> list[dict[str, Any]]:
+            return await api_client.list_project_documents(project_id)
 
         @ui.refreshable
         async def criteria_view() -> None:
@@ -80,15 +93,17 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 )
                 if not criteria:
                     ui.label(
-                        "Încă nu există obligații confirmate. Confirmă cel puțin o propunere de mai jos."
+                        "Încă nu există obligații confirmate. Confirmă cel puțin "
+                        "o propunere de mai jos."
                     ).classes("text-gray-500")
                     return
                 for criterion in criteria:
-                    with ui.card().classes("w-full shadow-sm border border-green-100"):
-                        ui.label(str(criterion.get("code", ""))).classes(
-                            "font-extrabold text-green-800"
+                    with ui.card().classes(
+                        "w-full shadow-sm border border-green-100 p-4"
+                    ):
+                        ui.label(_clean(criterion.get("description"))).classes(
+                            "text-gray-800 text-lg font-medium"
                         )
-                        ui.label(_clean(criterion.get("description"))).classes("text-gray-800")
                         ui.label(
                             f"Termen: {_deadline_text(criterion.get('deadline'))}"
                         ).classes("text-sm text-gray-600")
@@ -142,7 +157,10 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 comment = ui.textarea("Motivul corecției").props("autogrow").classes("w-full")
 
                 async def save() -> None:
-                    if not str(code.value or "").strip() or not str(description.value or "").strip():
+                    if (
+                        not str(code.value or "").strip()
+                        or not str(description.value or "").strip()
+                    ):
                         ui.notify("Codul și descrierea sunt obligatorii.", type="warning")
                         return
                     if not str(comment.value or "").strip():
@@ -170,8 +188,15 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     )
 
                 with ui.row().classes("w-full justify-end gap-2"):
-                    ui.button("Anulează", on_click=dialog.close).props("flat no-caps")
-                    ui.button("Salvează corecția", on_click=save).props("no-caps")
+                    ui.button("Anulează", on_click=dialog.close).props(
+                        "flat rounded no-caps text-color=grey-8 size=sm"
+                    ).classes("hover:bg-gray-100 font-bold")
+                    ui.button("Salvează corecția", on_click=save).props(
+                        "push rounded size=sm color=primary no-caps"
+                    ).classes(
+                        "px-4 py-1 text-gray-900 font-bold shadow-md hover:scale-105 "
+                        "transition-transform duration-200"
+                    )
             dialog.open()
 
         def reject_dialog(proposal: dict[str, Any]) -> None:
@@ -188,8 +213,15 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     await review_one(proposal, action="reject", comment=value)
 
                 with ui.row().classes("w-full justify-end gap-2"):
-                    ui.button("Anulează", on_click=dialog.close).props("flat no-caps")
-                    ui.button("Respinge", on_click=reject).props("color=negative no-caps")
+                    ui.button("Anulează", on_click=dialog.close).props(
+                        "flat rounded no-caps text-color=grey-8 size=sm"
+                    ).classes("hover:bg-gray-100 font-bold")
+                    ui.button("Respinge", on_click=reject).props(
+                        "push rounded size=sm color=negative no-caps"
+                    ).classes(
+                        "px-4 py-1 font-bold shadow-md hover:scale-105 "
+                        "transition-transform duration-200"
+                    )
             dialog.open()
 
         @ui.refreshable
@@ -198,14 +230,23 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
             with proposals_container:
                 try:
                     proposals = await load_proposals()
+                    documents = await load_documents()
                 except Exception as error:
                     ui.label(api_error_message(error)).classes("text-red-700")
                     return
 
-                unreviewed = [item for item in proposals if item.get("review") is None]
+                unreviewed = [
+                    p for p in proposals 
+                    if p.get("review") is None and p.get("sourceAnchors")
+                ]
                 ui.label(
                     f"Propuneri AI: {len(proposals)} · de verificat: {len(unreviewed)}"
                 ).classes("text-xl font-extrabold text-gray-800")
+
+                if not unreviewed:
+                    pending_jobs = getattr(app, "pending_extraction_jobs", {})
+                    if pending_jobs.pop(project_id, None) is not None:
+                        app.pending_extraction_jobs = pending_jobs
 
                 if not proposals:
                     ui.label(
@@ -215,7 +256,10 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     return
 
                 async def accept_all() -> None:
-                    current = [item for item in proposals if item.get("review") is None]
+                    current = [
+                        item for item in proposals 
+                        if item.get("review") is None and item.get("sourceAnchors")
+                    ]
                     if not current:
                         return
                     reviews = [
@@ -249,7 +293,11 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                         f"Confirmă toate ({len(unreviewed)})",
                         icon="done_all",
                         on_click=accept_all,
-                    ).props("no-caps").classes("self-start")
+                    ).props("push rounded size=md color=primary no-caps").classes(
+                        "px-4 py-2 text-sm font-extrabold shadow-lg hover:scale-105 "
+                        "transition-transform duration-200 text-gray-900 self-start"
+                    )
+
 
                 for proposal in proposals:
                     review = proposal.get("review")
@@ -258,11 +306,8 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     ):
                         with ui.row().classes("w-full items-start justify-between gap-3"):
                             with ui.column().classes("gap-1 flex-grow"):
-                                ui.label(str(proposal.get("proposedCode", ""))).classes(
-                                    "font-extrabold text-lg text-gray-800"
-                                )
                                 ui.label(_clean(proposal.get("proposedDescription"))).classes(
-                                    "text-gray-800"
+                                    "text-gray-800 text-lg font-medium"
                                 )
                                 ui.label(
                                     f"Termen: {_deadline_text(proposal.get('proposedDeadline'))}"
@@ -272,41 +317,63 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
 
                         anchors = proposal.get("sourceAnchors") or []
                         if anchors:
-                            ui.separator()
-                            ui.label("Dovezi exacte din document").classes("font-bold")
-                            for index, anchor in enumerate(anchors, start=1):
+                            ui.separator().classes("my-2 opacity-50")
+                            for anchor in anchors:
+                                page_number = anchor.get("pageNumber", "?")
+                                doc_id = anchor.get("documentId")
+                                doc_name = "document.pdf"
+                                if doc_id:
+                                    for d in documents:
+                                        if d.get("id") == doc_id:
+                                            doc_name = d.get("originalFilename") or "document.pdf"
+                                            break
+
                                 with ui.expansion(
-                                    f"Pasaj {index} · pagina {anchor.get('pageNumber', '?')}",
+                                    f"{doc_name} · pagina {page_number}",
                                     icon="article",
-                                ).classes("w-full"):
-                                    ui.label(_clean(anchor.get("passage"))).classes(
-                                        "whitespace-normal text-gray-800"
-                                    )
+                                ).classes("w-full bg-gray-50 rounded-md border border-gray-100"):
+                                    if doc_id:
+                                        ui.button(
+                                            f"Deschide documentul",
+                                            on_click=lambda did=doc_id, name=doc_name: open_document(
+                                                did, name
+                                            ),
+                                        ).props(
+                                            "flat no-caps dense color=primary"
+                                        ).classes("text-sm mb-2 self-start px-0")
                                     ui.label(
-                                        f"Document: {anchor.get('documentId', '')}"
-                                    ).classes("text-xs text-gray-500")
+                                        " ".join(str(anchor.get("passage", "")).split())
+                                    ).classes("whitespace-normal text-gray-700")
                         else:
                             ui.label("Fără pasaj sursă — nu poate fi confirmată.").classes(
                                 "text-red-700"
                             )
+    
 
-                        if review is None:
+                        if review is None and anchors:
                             with ui.row().classes("gap-2 mt-2"):
                                 ui.button(
                                     "Confirmă",
                                     icon="check",
                                     on_click=lambda p=proposal: review_one(p, action="accept"),
-                                ).props("no-caps")
+                                ).props("push rounded size=sm color=primary no-caps").classes(
+                                    "font-extrabold shadow-sm hover:scale-105 text-gray-900 "
+                                    "transition-transform duration-200 px-3"
+                                )
                                 ui.button(
                                     "Corectează",
                                     icon="edit",
                                     on_click=lambda p=proposal: correction_dialog(p),
-                                ).props("outline no-caps")
+                                ).props("outline rounded size=sm no-caps").classes(
+                                    "font-bold text-gray-800 hover:bg-gray-50 px-3"
+                                )
                                 ui.button(
                                     "Respinge",
                                     icon="close",
                                     on_click=lambda p=proposal: reject_dialog(p),
-                                ).props("flat color=negative no-caps")
+                                ).props("flat rounded size=sm color=negative no-caps").classes(
+                                    "font-bold hover:bg-red-50 px-3"
+                                )
 
         async def poll_job_after_connect() -> None:
             """Poll after the initial page has already been sent to the browser."""
@@ -336,7 +403,10 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     on_click=lambda: ui.navigate.to(
                         f"/project/{project_id}/criteria-review/{job_id}"
                     ),
-                ).props("no-caps")
+                ).props("push rounded size=md color=primary no-caps").classes(
+                    "px-4 py-2 text-sm font-extrabold shadow-lg hover:scale-105 "
+                    "transition-transform duration-200 text-gray-900"
+                )
                 return
 
             spinner.set_visibility(False)

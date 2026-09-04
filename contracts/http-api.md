@@ -71,6 +71,8 @@ Clienții nu parsează și nu construiesc cursorul.
 | POST | `/api/v1/projects` | 201 | creare proiect |
 | GET | `/api/v1/projects` | 200 | listare proiecte |
 | POST | `/api/v1/projects/{projectId}/documents` | 201 | upload document |
+| GET | `/api/v1/projects/{projectId}/documents` | 200 | listare documente |
+| GET | `/api/v1/documents/{documentId}/content` | 200 | descărcare conținut document |
 | POST | `/api/v1/projects/{projectId}/criteria` | 201 | creare criteriu |
 | GET | `/api/v1/projects/{projectId}/criteria` | 200 | listare criterii |
 | POST | `/api/v1/projects/{projectId}/criterion-extraction-jobs` | 202 | pornire extracție asincronă de propuneri |
@@ -90,14 +92,16 @@ Răspunsurile de creare includ `Location` spre resursa creată.
 ### ProjectCreate
 
 - `name`: 1-200 caractere;
-- `completionDate`: data finalizării proiectului;
-- `monitoringEndDate`: data contractuală explicită până la care pot exista rapoarte, egală cu sau ulterioară `completionDate`.
-
-API-ul nu calculează `monitoringEndDate` dintr-un număr de ani. O dată contractuală schimbată ulterior va necesita un endpoint și o decizie de contract separate.
+- `smisCode`: opțional, exact șase cifre; identificator extern de căutare, nu ID public;
+- `fundingCallId`: opțional, număr întreg pozitiv pentru apelul de finanțare;
+- `beneficiaryName`: opțional, 1-200 caractere.
 
 ### Project
 
-Adaugă `id`, `createdAt` și `updatedAt`.
+Adaugă `id`, `createdAt` și `updatedAt`. Răspunsul include întotdeauna cheile
+`smisCode`, `fundingCallId` și `beneficiaryName`; valoarea este `null` când
+metadatele nu au fost furnizate. UUID-ul `id` rămâne identitatea publică a
+resursei, iar codul SMIS este doar metadată externă.
 
 ## 8. Document
 
@@ -117,6 +121,10 @@ Tipuri acceptate:
 Dimensiunea maximă este 50 MiB (52.428.800 bytes) per fișier. Depășirea limitei produce `413 payload_too_large`; un tip neacceptat produce `415 unsupported_media_type`.
 
 Răspunsul `Document` conține `id`, `projectId`, `displayName`, `originalFilename`, `mediaType`, `sizeBytes`, `sha256`, `pageCount` nullable și `createdAt`. Rolul documentului într-un raport nu aparține resursei `Document`; el este stabilit pe asocierea `ReportDocument`.
+
+`GET /api/v1/projects/{projectId}/documents` întoarce o pagină de `Document`, cu aceeași paginare cu cursor opac ca restul listelor.
+
+`GET /api/v1/documents/{documentId}/content` întoarce bytes-ii originali ai documentului, cu `Content-Type` egal cu `mediaType` și antetul `Content-Disposition: attachment; filename="..."`. Accesul se verifică prin apartenența documentului la un proiect deținut de utilizator, nu prin `projectId` în rută.
 
 ## 9. Extracția criteriilor
 
@@ -304,9 +312,9 @@ Toate erorile folosesc `application/problem+json`:
   "requestId": "req_01J00000000000000000000000",
   "errors": [
     {
-      "field": "monitoringEndDate",
-      "code": "date_order",
-      "message": "monitoringEndDate must be on or after completionDate."
+      "field": "smisCode",
+      "code": "pattern_mismatch",
+      "message": "smisCode must be exactly six digits."
     }
   ]
 }

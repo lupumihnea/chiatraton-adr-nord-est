@@ -18,6 +18,7 @@ from app.models.domain import (
     Document,
     PaginatedCriteria,
     PaginatedCriterionProposals,
+    PaginatedDocuments,
     PaginatedProjects,
     PaginatedReports,
     PaginatedValidations,
@@ -47,6 +48,14 @@ class ApplicationService(Protocol):
         user: CurrentUser,
         idempotency: IdempotencyContext,
     ) -> Document: ...
+
+    async def list_project_documents(
+        self, project_id: UUID, limit: int, cursor: str | None, user: CurrentUser
+    ) -> PaginatedDocuments: ...
+
+    async def get_document_content(
+        self, document_id: UUID, user: CurrentUser
+    ) -> tuple[Document, bytes]: ...
 
     async def create_project_criterion(
         self,

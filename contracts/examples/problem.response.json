@@ -8,9 +8,9 @@
   "requestId": "req_synthetic_0001",
   "errors": [
     {
-      "field": "monitoringEndDate",
-      "code": "date_order",
-      "message": "monitoringEndDate must be on or after completionDate."
+      "field": "smisCode",
+      "code": "pattern_mismatch",
+      "message": "smisCode must be exactly six digits."
     }
   ]
 }

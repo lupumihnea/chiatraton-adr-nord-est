@@ -1,6 +1,8 @@
 # ADR API v1: Contract-first verification workspace
 
-- Stare: Acceptată
+- Stare: Acceptată (parțial suprascrisă de amendamentul din
+  [ADR-project-ui-metadata.md](ADR-project-ui-metadata.md) din 2026-09-03,
+  care elimină `completionDate`/`monitoringEndDate`)
 - Data: 2026-09-02
 - Owner: Mihnea - API și contracte
 

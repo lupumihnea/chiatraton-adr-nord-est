@@ -17,8 +17,7 @@ confirmă, corectează sau respinge.
 
 1. Un apel de finanțare conține proiecte.
 2. Un proiect conține documente și criterii de monitorizare.
-3. Proiectul primește rapoarte periodice până la `monitoringEndDate`, data
-   contractuală explicită.
+3. Proiectul primește rapoarte periodice atât timp cât este activ.
 4. Un raport are exact un document principal (`main_report` sau
    `final_document`) și poate avea documente suport (`attachment` sau
    `clarification`).

@@ -295,3 +295,20 @@ Mesajele brute ale furnizorului, prompturile și fragmentele documentelor nu se 
 ## 11. Compatibilitate
 
 Adăugarea de câmpuri opționale este compatibilă în aceeași versiune minoră. Eliminarea, redenumirea sau schimbarea semanticii câmpurilor necesită versiune nouă și coordonare între API și adaptorul Qwen. UI-ul nu consumă direct acest contract; primește numai contractul API deținut de Mihnea.
+
+## 12. Extensie MVP pentru analiza orientată pe excepții
+
+Adaptorul integrat păstrează intern regula „un rezultat per criteriu”, dar mapează rezultatele la taxonomia UI cerută de workflow:
+
+- `ok`
+- `not_applicable`
+- `nonconcordance`
+- `missing_information`
+- `different_value_or_date`
+- `insufficient_evidence`
+- `cross_report_contradiction`
+- `human_review_required`
+
+UI-ul nu afișează `ok` și `not_applicable`; ele rămân în DB pentru audit.
+
+Pentru a evita citate fabricate, adaptorul nu cere modelului să reproducă pasajele. Promptul furnizează elemente `EVIDENCE` cu identificatori locali, iar modelul returnează `evidence_ids`. API-ul persistă apoi textul și pagina elementelor locale selectate. Pentru o excepție se urmăresc două surse: sursa criteriului și pasajul relevant din raportul curent; la contradicții între rapoarte se folosesc raportul curent și raportul anterior.

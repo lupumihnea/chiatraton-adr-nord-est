@@ -8,6 +8,7 @@
 # Python
 __pycache__/
 *.py[cod]
+*.egg-info/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
@@ -28,3 +29,9 @@ htmlcov/
 Thumbs.db
 
 *.egg-info/
+
+# Outputuri generate din rapoarte
+exports/
+
+# Local Dev Scripts
+start-dev.ps1

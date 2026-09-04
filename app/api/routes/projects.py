@@ -14,6 +14,7 @@ from app.models.domain import (
     CriterionExtractionJobCreate,
     Document,
     PaginatedCriteria,
+    PaginatedDocuments,
     PaginatedProjects,
     PaginatedReports,
     Project,
@@ -94,6 +95,23 @@ async def upload_project_document(
     )
     response.headers["Location"] = f"/api/v1/projects/{project_id}/documents/{document.id}"
     return document
+
+
+@router.get(
+    "/{projectId}/documents",
+    tags=["Documents"],
+    operation_id="listProjectDocuments",
+    response_model=PaginatedDocuments,
+    responses={**success_response(200), **problem_responses(401, 404, 422, 500)},
+)
+async def list_project_documents(
+    project_id: ProjectId,
+    user: CurrentUserDep,
+    service: ApplicationServiceDep,
+    limit: PageLimit = 50,
+    cursor: PageCursor = None,
+) -> PaginatedDocuments:
+    return await service.list_project_documents(project_id, limit, cursor, user)
 
 
 @router.post(

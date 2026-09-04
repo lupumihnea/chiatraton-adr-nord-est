@@ -29,11 +29,7 @@ def _create_project(client, auth_headers, key="project-1", name="Synthetic proje
         "/api/v1/projects",
         key,
         expected=201,
-        json={
-            "name": name,
-            "completionDate": "2030-12-31",
-            "monitoringEndDate": "2033-12-31",
-        },
+        json={"name": name},
     ).json()
 
 

@@ -1,5 +1,6 @@
 {
   "name": "Proiect Sintetic Delta",
-  "completionDate": "2027-12-31",
-  "monitoringEndDate": "2030-12-31"
+  "smisCode": "654321",
+  "fundingCallId": 42,
+  "beneficiaryName": "Organizație Sintetică Delta"
 }

@@ -10,6 +10,9 @@ from typing import Any
 from uuid import uuid4
 
 import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
 
 DEFAULT_API_BASE_URL = "http://127.0.0.1:8000"
 
@@ -258,6 +261,47 @@ class ChIAtratonAPIClient:
             raise APIClientError("API-ul a returnat un document invalid.")
         return result
 
+    async def list_project_documents(
+        self,
+        project_id: str,
+        *,
+        limit: int = 100,
+        cursor: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"limit": limit}
+        if cursor is not None:
+            params["cursor"] = cursor
+        response = await self._request(
+            "GET",
+            f"/api/v1/projects/{project_id}/documents",
+            params=params,
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat documente într-un format invalid.")
+        return result
+
+    async def list_all_project_documents(self, project_id: str) -> list[dict[str, Any]]:
+        documents: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            page = await self.list_project_documents(project_id, limit=100, cursor=cursor)
+            items = page.get("items", [])
+            if not isinstance(items, list):
+                raise APIClientError("API-ul a returnat documente într-un format invalid.")
+            documents.extend(item for item in items if isinstance(item, dict))
+            next_cursor = page.get("nextCursor")
+            if not next_cursor:
+                return documents
+            cursor = str(next_cursor)
+
+    async def get_document_content(self, document_id: str) -> tuple[bytes, str | None]:
+        response = await self._request("GET", f"/api/v1/documents/{document_id}/content")
+        content_disposition = response.headers.get("content-disposition")
+        filename = None
+        if content_disposition and "filename=" in content_disposition:
+            filename = content_disposition.split("filename=", 1)[1].strip('"')
+        return response.content, filename
 
     async def create_criterion_extraction_job(
         self,

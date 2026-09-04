@@ -12,7 +12,6 @@ import numpy as np
 
 from AI.document_parser import ParsedDocument
 
-
 SEED_QUERIES = (
     "obligații asumate de beneficiar termene monitorizare proiect",
     "indicator de etapă criteriu de validare termen documente dovezi",
@@ -338,4 +337,3 @@ class ChunkIndex:
             selected.extend(required)
             selected.extend(optional[:remaining])
         return selected
-
