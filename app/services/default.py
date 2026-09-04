@@ -34,6 +34,8 @@ from app.models.domain import (
     DecisionAction,
     Document,
     DocumentMediaType,
+    DocumentQuestionAnswer,
+    DocumentQuestionCreate,
     PaginatedCriteria,
     PaginatedCriterionProposals,
     PaginatedDocuments,
@@ -56,6 +58,8 @@ from app.services.ports import (
     AIResponseValidationError,
     CriterionExtractionRequest,
     CriterionExtractor,
+    DocumentQuestionAnswerer,
+    DocumentQuestionRequest,
     DocumentStorage,
     JobRunner,
     ReportAnalysisRequest,
@@ -105,6 +109,7 @@ class DefaultApplicationService:
         document_storage: DocumentStorage,
         criterion_extractor: CriterionExtractor,
         report_analyzer: ReportAnalyzer,
+        document_question_answerer: DocumentQuestionAnswerer,
         job_runner: JobRunner,
         cursor_codec: CursorCodec,
         extra_shutdown_hooks: Sequence[Callable[[], Awaitable[None]]] = (),
@@ -113,6 +118,7 @@ class DefaultApplicationService:
         self._storage = document_storage
         self._criterion_extractor = criterion_extractor
         self._report_analyzer = report_analyzer
+        self._document_question_answerer = document_question_answerer
         self._job_runner = job_runner
         self._cursors = cursor_codec
         self._extra_shutdown_hooks = tuple(extra_shutdown_hooks)
@@ -373,6 +379,84 @@ class DefaultApplicationService:
         if content is None:
             raise _not_found("document")
         return document, content
+
+    async def ask_project_documents(
+        self,
+        project_id: UUID,
+        data: DocumentQuestionCreate,
+        user: CurrentUser,
+        idempotency: IdempotencyContext,
+    ) -> DocumentQuestionAnswer:
+        async with self._uow_factory() as uow:
+            await self._owned_project(uow, project_id, user)
+            project_documents = await uow.documents.list_for_project(project_id)
+            by_id = {document.id: document for document in project_documents}
+            selected_ids = data.document_ids or list(by_id)
+            if any(document_id not in by_id for document_id in selected_ids):
+                raise _problem(
+                    422,
+                    "validation_error",
+                    "Request validation failed",
+                    "Every documentId must reference a document from the same project.",
+                )
+
+        if not selected_ids:
+            raise _problem(
+                422,
+                "validation_error",
+                "Request validation failed",
+                "The project must contain at least one document.",
+            )
+
+        input_documents: list[AIInputDocument] = []
+        for document_id in selected_ids:
+            input_documents.append(
+                AIInputDocument(
+                    metadata=by_id[document_id],
+                    content_handle=await self._required_content_handle(document_id),
+                )
+            )
+        documents = tuple(input_documents)
+        try:
+            answer = await self._document_question_answerer.answer(
+                DocumentQuestionRequest(
+                    project_id=project_id,
+                    question=data.question.strip(),
+                    documents=documents,
+                    idempotency_key=idempotency.key,
+                )
+            )
+            allowed_document_ids = set(selected_ids)
+            for match in answer.matches:
+                anchor = match.source_anchor
+                document = by_id.get(anchor.document_id)
+                if document is None or anchor.document_id not in allowed_document_ids:
+                    raise AIResponseValidationError(
+                        "document answer references an unauthorized document"
+                    )
+                if document.page_count is not None and anchor.page_number > document.page_count:
+                    raise AIResponseValidationError(
+                        "document answer references a page outside the document"
+                    )
+                if match.value is not None and match.value not in anchor.passage:
+                    raise AIResponseValidationError(
+                        "document answer value is not an exact evidence substring"
+                    )
+            return answer
+        except (AIResponseValidationError, ValidationError) as exc:
+            raise _problem(
+                503,
+                "ai_invalid_response",
+                "AI response invalid",
+                "The document question response could not be grounded in local evidence.",
+            ) from exc
+        except Exception as exc:
+            raise _problem(
+                503,
+                "ai_unavailable",
+                "AI service unavailable",
+                "The document question service is temporarily unavailable.",
+            ) from exc
 
     async def create_project_criterion(
         self,

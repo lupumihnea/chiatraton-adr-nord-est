@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import hashlib
 
-from app.models.domain import AIOutcome, SourceAnchor
+from app.models.domain import (
+    AIOutcome,
+    DocumentAnswerStatus,
+    DocumentQuestionAnswer,
+    SourceAnchor,
+)
 from app.services.ports import (
     CriterionExtractionRequest,
     CriterionProposalCandidate,
+    DocumentQuestionRequest,
     ReportAnalysisRequest,
     ValidationCandidate,
 )
@@ -87,3 +93,12 @@ class DeterministicFakeReportAnalyzer:
                 )
             )
         return results
+
+
+class DeterministicFakeDocumentQuestionAnswerer:
+    async def answer(self, request: DocumentQuestionRequest) -> DocumentQuestionAnswer:
+        del request
+        return DocumentQuestionAnswer(
+            status=DocumentAnswerStatus.NOT_FOUND,
+            answer="Nu am găsit informația solicitată în documentele selectate.",
+        )

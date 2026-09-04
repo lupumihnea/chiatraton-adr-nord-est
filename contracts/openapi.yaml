@@ -210,6 +210,41 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/projects/{projectId}/document-questions:
+    post:
+      tags: [Document questions]
+      operationId: askProjectDocuments
+      summary: Răspunde unei întrebări factuale folosind documentele proiectului.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentQuestionCreate'
+      responses:
+        '200':
+          description: Răspuns factual cu dovezi exacte sau abstention.
+          headers:
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentQuestionAnswer'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/AIUnavailable'
+
   /api/v1/projects/{projectId}/criteria:
     post:
       tags: [Criteria]
@@ -945,6 +980,55 @@ components:
           type: string
           minLength: 1
           maxLength: 8000
+
+    DocumentQuestionCreate:
+      type: object
+      additionalProperties: false
+      required: [question]
+      properties:
+        question:
+          type: string
+          minLength: 3
+          maxLength: 500
+        documentIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          default: []
+          uniqueItems: true
+          maxItems: 100
+
+    DocumentAnswerMatch:
+      type: object
+      additionalProperties: false
+      required: [value, sourceAnchor]
+      properties:
+        value:
+          type: [string, 'null']
+          minLength: 1
+          maxLength: 1000
+        sourceAnchor:
+          $ref: '#/components/schemas/SourceAnchor'
+
+    DocumentQuestionAnswer:
+      type: object
+      additionalProperties: false
+      required: [status, answer, matches]
+      properties:
+        status:
+          type: string
+          enum: [found, not_found, ambiguous, unsupported]
+        answer:
+          type: string
+          minLength: 1
+          maxLength: 4000
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentAnswerMatch'
+          default: []
+          maxItems: 20
 
     CriterionCreate:
       type: object

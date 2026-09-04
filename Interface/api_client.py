@@ -303,6 +303,26 @@ class ChIAtratonAPIClient:
             filename = content_disposition.split("filename=", 1)[1].strip('"')
         return response.content, filename
 
+    async def ask_project_documents(
+        self,
+        project_id: str,
+        *,
+        question: str,
+        document_ids: list[str],
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        response = await self._request(
+            "POST",
+            f"/api/v1/projects/{project_id}/document-questions",
+            json={"question": question, "documentIds": document_ids},
+            headers={"Idempotency-Key": idempotency_key},
+            timeout=180.0,
+        )
+        result = response.json()
+        if not isinstance(result, dict):
+            raise APIClientError("API-ul a returnat un răspuns documentar invalid.")
+        return result
+
     async def create_criterion_extraction_job(
         self,
         project_id: str,

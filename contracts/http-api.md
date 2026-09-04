@@ -73,6 +73,7 @@ Clienții nu parsează și nu construiesc cursorul.
 | POST | `/api/v1/projects/{projectId}/documents` | 201 | upload document |
 | GET | `/api/v1/projects/{projectId}/documents` | 200 | listare documente |
 | GET | `/api/v1/documents/{documentId}/content` | 200 | descărcare conținut document |
+| POST | `/api/v1/projects/{projectId}/document-questions` | 200 | întrebare factuală cu dovezi exacte |
 | POST | `/api/v1/projects/{projectId}/criteria` | 201 | creare criteriu |
 | GET | `/api/v1/projects/{projectId}/criteria` | 200 | listare criterii |
 | POST | `/api/v1/projects/{projectId}/criterion-extraction-jobs` | 202 | pornire extracție asincronă de propuneri |
@@ -125,6 +126,16 @@ Răspunsul `Document` conține `id`, `projectId`, `displayName`, `originalFilena
 `GET /api/v1/projects/{projectId}/documents` întoarce o pagină de `Document`, cu aceeași paginare cu cursor opac ca restul listelor.
 
 `GET /api/v1/documents/{documentId}/content` întoarce bytes-ii originali ai documentului, cu `Content-Type` egal cu `mediaType` și antetul `Content-Disposition: attachment; filename="..."`. Accesul se verifică prin apartenența documentului la un proiect deținut de utilizator, nu prin `projectId` în rută.
+
+### Întrebări factuale
+
+`POST /api/v1/projects/{projectId}/document-questions` acceptă o întrebare scurtă și,
+opțional, o listă de `documentIds`. Lista goală înseamnă toate documentele proiectului.
+Operația este limitată la verificări de prezență și extragerea exactă a unei valori; nu
+produce sinteze ample. Răspunsul are status `found`, `not_found`, `ambiguous` sau
+`unsupported`. Rezultatele pozitive includ numai valori care apar textual în
+`SourceAnchor`, iar un rezultat negativ este formulat ca lipsă a unei dovezi găsite, nu
+ca dovadă absolută că informația nu există.
 
 ## 9. Extracția criteriilor
 

@@ -14,6 +14,7 @@ from Interface.api_client import (
     api_error_message,
     json_fingerprint,
 )
+from Interface.document_viewer import open_document_at_anchor
 
 TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
 
@@ -68,14 +69,6 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
         async def load_criteria() -> list[dict[str, Any]]:
             return await api_client.list_all_project_criteria(project_id)
             
-        async def open_document(document_id: str, fallback_name: str) -> None:
-            try:
-                content_bytes, filename = await api_client.get_document_content(document_id)
-            except Exception as error:
-                ui.notify(api_error_message(error), type="negative", timeout=8000)
-                return
-            ui.download(content_bytes, filename=filename or fallback_name)
-
         async def load_documents() -> list[dict[str, Any]]:
             return await api_client.list_all_project_documents(project_id)
 
@@ -321,6 +314,7 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                             for anchor in anchors:
                                 page_number = anchor.get("pageNumber", "?")
                                 doc_id = anchor.get("documentId")
+                                passage = str(anchor.get("passage", ""))
                                 doc_name = "document.pdf"
                                 if doc_id:
                                     for d in documents:
@@ -335,8 +329,15 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                                     if doc_id:
                                         ui.button(
                                             "Deschide documentul",
-                                            on_click=lambda did=doc_id, name=doc_name: (
-                                                open_document(did, name)
+                                            on_click=lambda did=doc_id, name=doc_name,
+                                            page=page_number,
+                                            text=passage: (
+                                                open_document_at_anchor(
+                                                    did,
+                                                    name,
+                                                    page_number=int(page),
+                                                    passage=text,
+                                                )
                                             ),
                                         ).props(
                                             "flat no-caps dense color=primary"

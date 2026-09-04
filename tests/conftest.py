@@ -34,6 +34,7 @@ def settings() -> Settings:
         docs_enabled=True,
         criterion_extractor_backend="fake",
         report_analyzer_backend="fake",
+        document_qa_backend="fake",
     )
 
 

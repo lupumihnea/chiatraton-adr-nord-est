@@ -112,6 +112,48 @@ class SourceAnchor(APIModel):
     passage: str = Field(min_length=1, max_length=8000)
 
 
+class DocumentAnswerStatus(StrEnum):
+    FOUND = "found"
+    NOT_FOUND = "not_found"
+    AMBIGUOUS = "ambiguous"
+    UNSUPPORTED = "unsupported"
+
+
+class DocumentQuestionCreate(APIModel):
+    question: str = Field(min_length=3, max_length=500)
+    document_ids: list[UUID] = Field(
+        default_factory=list,
+        max_length=100,
+        json_schema_extra={"default": [], "uniqueItems": True},
+    )
+
+    @model_validator(mode="after")
+    def unique_documents(self) -> Self:
+        if len(set(self.document_ids)) != len(self.document_ids):
+            raise ValueError("documentIds must be unique")
+        return self
+
+
+class DocumentAnswerMatch(APIModel):
+    value: str | None = Field(default=None, min_length=1, max_length=1000)
+    source_anchor: SourceAnchor
+
+
+class DocumentQuestionAnswer(APIModel):
+    status: DocumentAnswerStatus
+    answer: str = Field(min_length=1, max_length=4000)
+    matches: list[DocumentAnswerMatch] = Field(default_factory=list, max_length=20)
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> Self:
+        if self.status in {DocumentAnswerStatus.FOUND, DocumentAnswerStatus.AMBIGUOUS}:
+            if not self.matches:
+                raise ValueError("found and ambiguous answers require evidence")
+        elif self.matches:
+            raise ValueError("not_found and unsupported answers cannot include evidence")
+        return self
+
+
 class ProjectCreate(APIModel):
     name: str = Field(min_length=1, max_length=200)
     smis_code: str | None = Field(default=None, pattern=r"^[0-9]{6}$")

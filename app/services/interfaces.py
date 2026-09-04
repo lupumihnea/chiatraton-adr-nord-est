@@ -16,6 +16,8 @@ from app.models.domain import (
     CriterionProposalReviewBatch,
     CriterionProposalReviewBatchResult,
     Document,
+    DocumentQuestionAnswer,
+    DocumentQuestionCreate,
     PaginatedCriteria,
     PaginatedCriterionProposals,
     PaginatedDocuments,
@@ -56,6 +58,14 @@ class ApplicationService(Protocol):
     async def get_document_content(
         self, document_id: UUID, user: CurrentUser
     ) -> tuple[Document, bytes]: ...
+
+    async def ask_project_documents(
+        self,
+        project_id: UUID,
+        data: DocumentQuestionCreate,
+        user: CurrentUser,
+        idempotency: IdempotencyContext,
+    ) -> DocumentQuestionAnswer: ...
 
     async def create_project_criterion(
         self,

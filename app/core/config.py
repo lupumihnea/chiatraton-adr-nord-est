@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     document_storage_backend: Literal["memory", "external"] = "memory"
     criterion_extractor_backend: Literal["fake", "qwen", "external"] = "fake"
     report_analyzer_backend: Literal["fake", "qwen", "external"] = "fake"
+    document_qa_backend: Literal["fake", "openrouter", "external"] = "fake"
     job_runner_backend: Literal["local", "external"] = "local"
 
     # AIClient configuration.  Exact AI_* names come from contracts/ai-contract.md;
@@ -59,6 +60,13 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices(
             "AI_REVIEWER_MODEL_NAME",
             "CHIATRATON_AI_REVIEWER_MODEL_NAME",
+        ),
+    )
+    ai_qa_model_name: str = Field(
+        default="google/gemini-2.5-flash",
+        validation_alias=AliasChoices(
+            "AI_QA_MODEL_NAME",
+            "CHIATRATON_AI_QA_MODEL_NAME",
         ),
     )
     ai_base_url: str = Field(
@@ -112,6 +120,7 @@ class Settings(BaseSettings):
             "CHIATRATON_DOCUMENT_STORAGE_BACKEND": self.document_storage_backend == "memory",
             "CHIATRATON_CRITERION_EXTRACTOR_BACKEND": self.criterion_extractor_backend == "fake",
             "CHIATRATON_REPORT_ANALYZER_BACKEND": self.report_analyzer_backend == "fake",
+            "CHIATRATON_DOCUMENT_QA_BACKEND": self.document_qa_backend == "fake",
             "CHIATRATON_JOB_RUNNER_BACKEND": self.job_runner_backend == "local",
         }
         if self.environment == "production":

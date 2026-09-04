@@ -68,6 +68,7 @@ def chunk_documents(
     category_by_document: dict[UUID, str] | None = None,
     max_chars: int = 1600,
     overlap: int = 180,
+    include_prefer_structured_raw: bool = False,
 ) -> tuple[Chunk, ...]:
     chunks: list[Chunk] = []
     category_by_document = category_by_document or {}
@@ -112,7 +113,7 @@ def chunk_documents(
             # and explicitly unselected alternatives.  The parser already built
             # selected_option blocks, so suppress the raw page for extraction /
             # retrieval to prevent false obligations from re-entering downstream.
-            if page.prefer_structured:
+            if page.prefer_structured and not include_prefer_structured_raw:
                 continue
 
             text = page.text

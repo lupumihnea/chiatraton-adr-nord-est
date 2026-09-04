@@ -17,12 +17,13 @@ from app.repositories.memory import InMemoryUnitOfWorkFactory
 from app.services.default import DefaultApplicationService
 from app.services.fake_ai import (
     DeterministicFakeCriterionExtractor,
+    DeterministicFakeDocumentQuestionAnswerer,
     DeterministicFakeReportAnalyzer,
 )
 from app.services.idempotency import IdempotencyStore
 from app.services.interfaces import ApplicationService
 from app.services.job_runner import LocalJobRunner
-from app.services.ports import CriterionExtractor, ReportAnalyzer
+from app.services.ports import CriterionExtractor, DocumentQuestionAnswerer, ReportAnalyzer
 from app.services.storage import InMemoryDocumentStorage
 
 
@@ -31,6 +32,7 @@ def _local_application_service(
     *,
     criterion_extractor: CriterionExtractor | None,
     report_analyzer: ReportAnalyzer | None,
+    document_question_answerer: DocumentQuestionAnswerer | None,
 ) -> DefaultApplicationService:
     """Compose development/demo adapters without crossing architectural boundaries."""
 
@@ -46,6 +48,10 @@ def _local_application_service(
         raise ValueError("An external CriterionExtractor must be injected at the composition root")
     if settings.report_analyzer_backend == "external" and report_analyzer is None:
         raise ValueError("An external ReportAnalyzer must be injected at the composition root")
+    if settings.document_qa_backend == "external" and document_question_answerer is None:
+        raise ValueError(
+            "An external DocumentQuestionAnswerer must be injected at the composition root"
+        )
 
     storage = InMemoryDocumentStorage()
     runner = LocalJobRunner()
@@ -85,7 +91,28 @@ def _local_application_service(
         elif settings.report_analyzer_backend == "qwen":
             report_analyzer = qwen_adapter
 
-    if criterion_extractor is None or report_analyzer is None:
+    if document_question_answerer is None:
+        if settings.document_qa_backend == "fake":
+            document_question_answerer = DeterministicFakeDocumentQuestionAnswerer()
+        elif settings.document_qa_backend == "openrouter":
+            from AI.document_qa import OpenRouterDocumentQuestionAnswerer
+
+            document_question_answerer = OpenRouterDocumentQuestionAnswerer(
+                content_loader=storage.get,
+                model=settings.ai_qa_model_name,
+                base_url=settings.ai_base_url,
+                api_key=settings.ai_api_key.get_secret_value(),
+                timeout_seconds=settings.ai_timeout_seconds,
+                embedding_model=settings.ai_embedding_model,
+                app_url=settings.ai_app_url,
+                app_name=settings.ai_app_name,
+            )
+
+    if (
+        criterion_extractor is None
+        or report_analyzer is None
+        or document_question_answerer is None
+    ):
         raise ValueError("AI adapters could not be composed")
 
     return DefaultApplicationService(
@@ -93,6 +120,7 @@ def _local_application_service(
         document_storage=storage,
         criterion_extractor=criterion_extractor,
         report_analyzer=report_analyzer,
+        document_question_answerer=document_question_answerer,
         job_runner=runner,
         cursor_codec=CursorCodec(settings.jwt_secret.get_secret_value()),
     )
@@ -105,6 +133,7 @@ def create_app(
     application_service: ApplicationService | None = None,
     criterion_extractor: CriterionExtractor | None = None,
     report_analyzer: ReportAnalyzer | None = None,
+    document_question_answerer: DocumentQuestionAnswerer | None = None,
     extra_routers: Iterable[APIRouter] = (),
 ) -> FastAPI:
     runtime_settings = settings or get_settings()
@@ -141,6 +170,7 @@ def create_app(
             runtime_settings,
             criterion_extractor=criterion_extractor,
             report_analyzer=report_analyzer,
+            document_question_answerer=document_question_answerer,
         )
     application.state.idempotency_store = idempotency_store
     application.state.application_service = application_service

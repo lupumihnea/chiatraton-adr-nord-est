@@ -8,7 +8,14 @@ from datetime import date
 from typing import Protocol
 from uuid import UUID
 
-from app.models.domain import AIOutcome, Criterion, Document, Report, SourceAnchor
+from app.models.domain import (
+    AIOutcome,
+    Criterion,
+    Document,
+    DocumentQuestionAnswer,
+    Report,
+    SourceAnchor,
+)
 
 
 class AIResponseValidationError(RuntimeError):
@@ -59,6 +66,14 @@ class ReportAnalysisRequest:
     idempotency_key: str
 
 
+@dataclass(frozen=True, slots=True)
+class DocumentQuestionRequest:
+    project_id: UUID
+    question: str
+    documents: tuple[AIInputDocument, ...]
+    idempotency_key: str
+
+
 class CriterionExtractor(Protocol):
     async def extract(
         self, request: CriterionExtractionRequest
@@ -67,6 +82,10 @@ class CriterionExtractor(Protocol):
 
 class ReportAnalyzer(Protocol):
     async def analyze(self, request: ReportAnalysisRequest) -> list[ValidationCandidate]: ...
+
+
+class DocumentQuestionAnswerer(Protocol):
+    async def answer(self, request: DocumentQuestionRequest) -> DocumentQuestionAnswer: ...
 
 
 class DocumentStorage(Protocol):

@@ -56,6 +56,7 @@ def test_production_accepts_only_external_adapter_configuration():
         document_storage_backend="external",
         criterion_extractor_backend="external",
         report_analyzer_backend="external",
+        document_qa_backend="external",
         job_runner_backend="external",
         docs_enabled=False,
     )

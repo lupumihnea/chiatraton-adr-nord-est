@@ -89,6 +89,7 @@ Variabilele au prefixul `CHIATRATON_`:
 | `DOCUMENT_STORAGE_BACKEND` | `memory` | `external` |
 | `CRITERION_EXTRACTOR_BACKEND` | `fake` sau `qwen` | `external` |
 | `REPORT_ANALYZER_BACKEND` | `fake` sau `qwen` | `external` |
+| `DOCUMENT_QA_BACKEND` | `fake` sau `openrouter` | `external` |
 | `JOB_RUNNER_BACKEND` | `local` | `external` |
 | `API_BASE_URL` | `http://127.0.0.1:8000` | URL-ul API injectat la runtime |
 | `UI_BEARER_TOKEN` | token local cu durată scurtă | token injectat la runtime |
@@ -113,8 +114,10 @@ Apoi configurează:
 ```powershell
 $env:CHIATRATON_CRITERION_EXTRACTOR_BACKEND="qwen"
 $env:CHIATRATON_REPORT_ANALYZER_BACKEND="qwen"
+$env:CHIATRATON_DOCUMENT_QA_BACKEND="openrouter"
 $env:AI_PROVIDER="qwen"
 $env:AI_MODEL_NAME="qwen/qwen3-235b-a22b-2507"
+$env:AI_QA_MODEL_NAME="google/gemini-2.5-flash"
 # Opțional: un model separat, mai strict, pentru review și deduplicare.
 $env:AI_REVIEWER_MODEL_NAME="provider/reviewer-model"
 $env:AI_BASE_URL="https://openrouter.ai/api/v1"
@@ -127,6 +130,9 @@ La extracția baseline, modelul formulează un statement atomic pentru propunere
 returnează separat pointeri către source-units. Adaptorul reconstruiește local
 pasajele exacte și pagina înainte ca API-ul să creeze `CriterionProposal`.
 La analiza raportului, dovezile sunt reconstruite la fel pentru `CriterionValidation`.
+Întrebările factuale folosesc separat BM25 + E5 cu reciprocal-rank fusion și un singur
+apel structurat. Adaptorul acceptă numai valori care apar în pasajul citat și se abține
+când nu găsește o dovadă directă. Această configurare nu schimbă extractorul de obligații.
 Stratul intern `AI.claim_engine` modelează aceste rezultate ca afirmații
 verificabile: statement formulat de AI, evidence exact din document, verificări
 independente și decizie deterministă. Detalii în `docs/ai-implementation.md` și
@@ -205,12 +211,14 @@ $env:CHIATRATON_PDF_OPENDATALOADER_HYBRID_MODE="auto"
 | POST | `/api/v1/criterion-extraction-jobs/{jobId}/proposal-reviews` | funcțional, batch atomic |
 | POST | `/api/v1/projects/{projectId}/reports` | funcțional, document primar unic |
 | GET | `/api/v1/projects/{projectId}/reports` | funcțional, cursor opac |
+| POST | `/api/v1/projects/{projectId}/document-questions` | funcțional, răspuns factual cu dovezi |
 | POST | `/api/v1/reports/{reportId}/analysis-jobs` | funcțional, `202` + snapshot criterii |
 | GET | `/api/v1/reports/{reportId}/validations` | funcțional, istoric opțional |
 | POST | `/api/v1/validations/{validationId}/decisions` | funcțional, control optimist al reviziei |
 
 Rutele FastAPI depind numai de interfața `ApplicationService`. Serviciul concret depinde
-de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnalyzer` și
+de porturile `UnitOfWork`, `DocumentStorage`, `CriterionExtractor`, `ReportAnalyzer`,
+`DocumentQuestionAnswerer` și
 `JobRunner`; nu importă SQLite, Qwen, OpenRouter sau NiceGUI.
 
 ## Reguli importante

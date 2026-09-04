@@ -17,6 +17,7 @@ from Interface.api_client import (
     api_error_message,
     json_fingerprint,
 )
+from Interface.document_viewer import open_document_at_anchor
 
 TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
 OUTCOME_LABELS = {
@@ -144,21 +145,13 @@ async def report_analysis_page(project_id: str, report_id: str, job_id: str) -> 
             ui.notify("Decizia umană a fost salvată.", type="positive")
             await render_results()
 
-        async def open_document(document_id: str, fallback_name: str) -> None:
-            try:
-                content_bytes, filename = await api_client.get_document_content(document_id)
-            except Exception as error:
-                ui.notify(api_error_message(error), type="negative", timeout=8000)
-                return
-            ui.download(content_bytes, filename=filename or fallback_name)
-
         async def render_results() -> None:
             nonlocal show_all_results
             results_container.clear()
             try:
                 criteria = await api_client.list_all_project_criteria(project_id)
                 validations = await api_client.list_all_report_validations(report_id)
-                documents = await api_client.list_project_documents(project_id)
+                documents = await api_client.list_all_project_documents(project_id)
             except Exception as error:
                 with results_container:
                     ui.label(api_error_message(error)).classes("text-red-700 font-bold")
@@ -167,6 +160,11 @@ async def report_analysis_page(project_id: str, report_id: str, job_id: str) -> 
             criterion_by_id = {
                 str(item.get("id")): item
                 for item in criteria
+                if isinstance(item, dict) and item.get("id")
+            }
+            document_by_id = {
+                str(item.get("id")): item
+                for item in documents
                 if isinstance(item, dict) and item.get("id")
             }
 
@@ -247,6 +245,29 @@ async def report_analysis_page(project_id: str, report_id: str, job_id: str) -> 
                                     f"Pasaj {index} · pagina {anchor.get('pageNumber', '?')}",
                                     icon="article",
                                 ).classes("w-full"):
+                                    doc_id = str(anchor.get("documentId") or "")
+                                    page = int(anchor.get("pageNumber") or 1)
+                                    passage = str(anchor.get("passage") or "")
+                                    document = document_by_id.get(doc_id, {})
+                                    name = str(
+                                        document.get("originalFilename") or "document.pdf"
+                                    )
+                                    if doc_id:
+                                        ui.button(
+                                            "Deschide documentul",
+                                            icon="open_in_new",
+                                            on_click=lambda did=doc_id, filename=name,
+                                            page_number=page, text=passage: (
+                                                open_document_at_anchor(
+                                                    did,
+                                                    filename,
+                                                    page_number=page_number,
+                                                    passage=text,
+                                                )
+                                            ),
+                                        ).props(
+                                            "flat dense no-caps color=primary"
+                                        ).classes("self-start px-0")
                                     ui.label(_clean(anchor.get("passage"))).classes(
                                         "whitespace-normal text-gray-800"
                                     )
