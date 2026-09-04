@@ -6,6 +6,7 @@ import hashlib
 
 from app.models.domain import (
     AIOutcome,
+    DocumentAnswerMatch,
     DocumentAnswerStatus,
     DocumentQuestionAnswer,
     SourceAnchor,
@@ -97,6 +98,24 @@ class DeterministicFakeReportAnalyzer:
 
 class DeterministicFakeDocumentQuestionAnswerer:
     async def answer(self, request: DocumentQuestionRequest) -> DocumentQuestionAnswer:
+        if "perioad" in request.question.casefold() and request.documents:
+            document = sorted(request.documents, key=lambda item: str(item.metadata.id))[0]
+            value = "01.01.2031 - 31.03.2031"
+            passage = f"Perioada de raportare: {value}."
+            return DocumentQuestionAnswer(
+                status=DocumentAnswerStatus.FOUND,
+                answer=f"Valoarea identificată este „{value}”.",
+                matches=[
+                    DocumentAnswerMatch(
+                        value=value,
+                        source_anchor=SourceAnchor(
+                            document_id=document.metadata.id,
+                            page_number=1,
+                            passage=passage,
+                        ),
+                    )
+                ],
+            )
         del request
         return DocumentQuestionAnswer(
             status=DocumentAnswerStatus.NOT_FOUND,

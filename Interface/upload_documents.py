@@ -12,7 +12,6 @@ persisted through the existing Document.displayName field.
 from __future__ import annotations
 
 import asyncio
-from datetime import date
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -28,6 +27,11 @@ from Interface.api_client import (
     api_error_message,
     json_fingerprint,
     upload_fingerprint,
+)
+from Interface.report_period import (
+    REPORT_PERIOD_QUESTION,
+    ReportPeriodExtractionError,
+    period_from_document_answer,
 )
 
 MAX_PDF_BYTES = 26_214_400
@@ -69,23 +73,6 @@ def _selected_category(row: dict[str, Any]) -> str | None:
     if stored in CATEGORY_OPTIONS:
         return str(stored)
 
-    return None
-
-
-def _valid_report_period(row: dict[str, Any]) -> str | None:
-    if row.get("category") != PROGRESS_REPORT_CATEGORY:
-        return None
-    start = str(row.get("period_start") or "").strip()
-    end = str(row.get("period_end") or "").strip()
-    if not start or not end:
-        return "Completează perioada pentru fiecare raport de progres."
-    try:
-        start_date = date.fromisoformat(start)
-        end_date = date.fromisoformat(end)
-    except ValueError:
-        return "Perioada raportului de progres nu conține date valide."
-    if end_date < start_date:
-        return "Data de sfârșit a raportului trebuie să fie după data de început."
     return None
 
 
@@ -135,8 +122,6 @@ async def upload_documents_page(project_id: str) -> None:
                     "status_label": None,
                     "completed": False,
                     "document_id": None,
-                    "period_start": None,
-                    "period_end": None,
                 }
                 upload_state.append(row_data)
 
@@ -245,19 +230,10 @@ async def upload_documents_page(project_id: str) -> None:
                             "rounded-xl p-3"
                         )
                         with report_period:
-                            ui.icon("date_range").classes("text-yellow-600")
-                            ui.label("Perioada raportată").classes(
-                                "font-bold text-yellow-900"
-                            )
-                            start_input = ui.input("De la").props(
-                                "type=date outlined dense"
-                            ).classes("w-40")
-                            end_input = ui.input("Până la").props(
-                                "type=date outlined dense"
-                            ).classes("w-48")
+                            ui.icon("auto_awesome").classes("text-yellow-600")
                             ui.label(
-                                "Este folosită numai pentru analiza progresului."
-                            ).classes("text-xs text-yellow-800")
+                                "Perioada raportată va fi extrasă automat din PDF."
+                            ).classes("text-sm font-bold text-yellow-900")
                         report_period.set_visibility(False)
 
                         def category_changed(event: Any) -> None:
@@ -269,12 +245,6 @@ async def upload_documents_page(project_id: str) -> None:
                             )
 
                         category_select.on_value_change(category_changed)
-                        start_input.on_value_change(
-                            lambda event: row_data.update({"period_start": event.value})
-                        )
-                        end_input.on_value_change(
-                            lambda event: row_data.update({"period_end": event.value})
-                        )
 
             add_upload_row()
 
@@ -329,10 +299,6 @@ async def upload_documents_page(project_id: str) -> None:
                             )
                             return
                         row["category"] = category
-                        period_error = _valid_report_period(row)
-                        if period_error:
-                            ui.notify(period_error, type="warning", position="top")
-                            return
 
                     progress_rows = [
                         row for row in pending if row["category"] == PROGRESS_REPORT_CATEGORY
@@ -394,6 +360,12 @@ async def upload_documents_page(project_id: str) -> None:
                                     f"Categoria documentului {filename!r} nu este selectată."
                                 )
                             row_data["category"] = category
+                            if row_data.get("document_id"):
+                                status_label = row_data["status_label"]
+                                if status_label is not None:
+                                    status_label.text = "Încărcat"
+                                uploaded += 1
+                                continue
                             display_name = CATEGORY_OPTIONS[category]
                             fingerprint = upload_fingerprint(
                                 project_id=project_id,
@@ -523,23 +495,77 @@ async def upload_documents_page(project_id: str) -> None:
                         # the obligation-extraction job.
                         created_reports: list[dict[str, Any]] = []
                         for row in report_rows:
+                            document_id = str(row["document_id"])
+                            loading_text.text = "Extragem perioada raportată din PDF..."
+                            period_payload = {
+                                "question": REPORT_PERIOD_QUESTION,
+                                "documentIds": [document_id],
+                            }
+                            period_fingerprint = json_fingerprint(period_payload)
+                            period_operation = f"extract-report-period:{document_id}"
+                            period_key = key_manager.key_for(
+                                period_operation, period_fingerprint
+                            )
+                            try:
+                                period_answer = await api_client.ask_project_documents(
+                                    project_id,
+                                    question=REPORT_PERIOD_QUESTION,
+                                    document_ids=[document_id],
+                                    idempotency_key=period_key,
+                                )
+                                period_start, period_end = period_from_document_answer(
+                                    period_answer
+                                )
+                            except ReportPeriodExtractionError as error:
+                                row["completed"] = False
+                                status_label = row.get("status_label")
+                                if status_label is not None:
+                                    status_label.text = "Perioadă negăsită"
+                                    status_label.classes(
+                                        replace=(
+                                            "text-xs font-bold text-red-700 uppercase "
+                                            "tracking-wide"
+                                        )
+                                    )
+                                error_label.text = str(error)
+                                error_label.set_visibility(True)
+                                ui.notify(str(error), type="negative", timeout=10000)
+                                return
+                            except Exception:
+                                row["completed"] = False
+                                raise
+
+                            key_manager.mark_succeeded(
+                                period_operation, period_fingerprint
+                            )
+                            row["period_start"] = period_start
+                            row["period_end"] = period_end
+                            ui.notify(
+                                f"Perioadă extrasă: {period_start} → {period_end}",
+                                type="positive",
+                                timeout=6000,
+                            )
                             payload = {
                                 "projectId": project_id,
-                                "documentId": row["document_id"],
-                                "periodStart": row["period_start"],
-                                "periodEnd": row["period_end"],
+                                "documentId": document_id,
+                                "periodStart": period_start,
+                                "periodEnd": period_end,
                                 "reportType": "implementation_progress",
                             }
                             fingerprint = json_fingerprint(payload)
-                            operation = f"create-progress-report:{row['document_id']}"
+                            operation = f"create-progress-report:{document_id}"
                             key = key_manager.key_for(operation, fingerprint)
-                            report = await api_client.create_project_report(
-                                project_id,
-                                period_start=str(row["period_start"]),
-                                period_end=str(row["period_end"]),
-                                document_id=str(row["document_id"]),
-                                idempotency_key=key,
-                            )
+                            try:
+                                report = await api_client.create_project_report(
+                                    project_id,
+                                    period_start=period_start,
+                                    period_end=period_end,
+                                    document_id=document_id,
+                                    idempotency_key=key,
+                                )
+                            except Exception:
+                                row["completed"] = False
+                                raise
                             key_manager.mark_succeeded(operation, fingerprint)
                             created_reports.append(report)
 
