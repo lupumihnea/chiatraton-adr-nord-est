@@ -394,14 +394,9 @@ def test_empty_report_context_auto_selects_baseline_and_previous_reports(client,
         ).json()
 
     baseline = upload_with_category("auto-baseline", "baseline.pdf", "Documente inițiale")
-    previous_document = upload_with_category(
-        "auto-previous-doc", "previous.pdf", "Rapoarte de progres"
-    )
-    current_document = upload_with_category(
-        "auto-current-doc", "current.pdf", "Rapoarte de progres"
-    )
-    other_document = upload_with_category("auto-other", "other.pdf", "Alte documente")
 
+    # A confirmed obligation baseline must exist before progress-report documents
+    # can be uploaded (see DefaultApplicationService._assert_confirmed_baseline).
     _post(
         client,
         auth_headers,
@@ -410,6 +405,15 @@ def test_empty_report_context_auto_selects_baseline_and_previous_reports(client,
         expected=201,
         json={"code": "AUTO-1", "description": "Obligație confirmată pentru test."},
     )
+
+    previous_document = upload_with_category(
+        "auto-previous-doc", "previous.pdf", "Rapoarte de progres"
+    )
+    current_document = upload_with_category(
+        "auto-current-doc", "current.pdf", "Rapoarte de progres"
+    )
+    other_document = upload_with_category("auto-other", "other.pdf", "Alte documente")
+
     previous = _post(
         client,
         auth_headers,

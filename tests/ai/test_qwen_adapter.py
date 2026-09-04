@@ -19,6 +19,7 @@ from app.models.domain import (  # noqa: E402
     ReportDocumentRole,
     ReportStatus,
     ReportType,
+    SourceAnchor,
 )
 from app.services.ports import (  # noqa: E402
     AIInputDocument,

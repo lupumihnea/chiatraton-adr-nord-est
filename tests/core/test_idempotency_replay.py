@@ -26,7 +26,13 @@ def _authorization(subject: str, key: str) -> dict[str, str]:
 
 def _client() -> tuple[TestClient, IdempotencyHarness]:
     harness = IdempotencyHarness()
-    settings = Settings(environment="test", jwt_secret=TEST_SECRET)
+    settings = Settings(
+        environment="test",
+        jwt_secret=TEST_SECRET,
+        criterion_extractor_backend="fake",
+        report_analyzer_backend="fake",
+        document_qa_backend="fake",
+    )
     client = TestClient(
         create_app(settings, extra_routers=[harness.router]),
         raise_server_exceptions=False,

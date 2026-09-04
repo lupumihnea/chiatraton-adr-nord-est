@@ -15,8 +15,27 @@ from Interface.api_client import (
     json_fingerprint,
 )
 from Interface.document_viewer import open_document_at_anchor
+from Interface.expert_profile import (
+    ConfidenceAssessment,
+    assess_proposal,
+    demonstration_profile,
+    expert_profile_demo_enabled,
+    learn_from_review,
+    profile_from_proposals,
+)
 
 TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled"}
+REVIEW_ACTION_LABELS = {
+    "accept": "confirmată",
+    "correct": "corectată",
+    "reject": "respinsă",
+}
+REJECTION_REASON_OPTIONS = {
+    "not_obligation": "Nu este o obligație",
+    "insufficient_evidence": "Dovadă insuficientă",
+    "duplicate": "Propunere duplicată",
+    "too_general": "Formulare prea generală",
+}
 
 
 def _clean(text: object) -> str:
@@ -27,15 +46,27 @@ def _deadline_text(value: object) -> str:
     return str(value) if value else "Fără termen explicit"
 
 
+def _score_color(score: int) -> str:
+    if score >= 85:
+        return "positive"
+    if score >= 65:
+        return "warning"
+    return "negative"
+
+
 @ui.page("/project/{project_id}/criteria-review/{job_id}")
 async def criteria_review_page(project_id: str, job_id: str) -> None:
     """Show extraction proposals, their exact sources, and review actions."""
 
     ui.colors(primary="#ffcc00", accent="#ffcc00")
     key_manager = IdempotencyKeyManager()
+    profile_enabled = expert_profile_demo_enabled()
+    expert_profile = demonstration_profile()
 
     with ui.column().classes("w-full items-center min-h-[85vh] bg-gray-50/30 p-4"):
-        with ui.row().classes("w-full max-w-6xl items-center justify-between mb-2"):
+        with ui.row().classes(
+            "w-full max-w-6xl items-center relative min-h-[48px] mb-2"
+        ):
             ui.button(
                 "Înapoi la proiect",
                 icon="arrow_back",
@@ -44,17 +75,13 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 "hover:bg-gray-100 px-4 py-2 rounded-full font-bold"
             )
             ui.label("Extragere obligații").classes(
-                "text-2xl font-extrabold text-gray-800"
+                "absolute left-1/2 -translate-x-1/2 text-2xl font-extrabold "
+                "text-gray-800 whitespace-nowrap"
             )
 
         with ui.card().classes(
-            "w-full max-w-6xl rounded-[1.5rem] shadow-xl border border-yellow-100"
+            "w-full max-w-6xl rounded-xl shadow-sm border border-yellow-100 px-4 py-3"
         ):
-            ui.label(
-                "AI-ul propune obligațiile, dar acestea devin obligații confirmate numai după "
-                "confirmarea utilizatorului. Pasajele afișate sunt recuperate din sursa locală."
-            ).classes("text-gray-700")
-
             status_row = ui.row().classes("items-center gap-3")
             with status_row:
                 spinner = ui.spinner(size="md")
@@ -107,7 +134,10 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
             action: str,
             correction: dict[str, Any] | None = None,
             comment: str | None = None,
+            rejection_reason: str | None = None,
         ) -> None:
+            nonlocal expert_profile
+
             review: dict[str, Any] = {
                 "proposalId": proposal["id"],
                 "proposalRevision": proposal["revision"],
@@ -131,7 +161,18 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                 ui.notify(api_error_message(error), type="negative", timeout=10000)
                 return
             key_manager.mark_succeeded(operation, fingerprint)
-            ui.notify("Decizia a fost salvată.", type="positive")
+            if profile_enabled:
+                update = learn_from_review(
+                    expert_profile,
+                    action=action,
+                    proposal=proposal,
+                    correction=correction,
+                    rejection_reason=rejection_reason,
+                )
+                expert_profile = update.profile
+                ui.notify(update.message, type="positive", timeout=6000)
+            else:
+                ui.notify("Decizia a fost salvată.", type="positive")
             await proposals_view.refresh()
             await criteria_view.refresh()
 
@@ -195,15 +236,34 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
         def reject_dialog(proposal: dict[str, Any]) -> None:
             with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl"):
                 ui.label("Respinge propunerea").classes("text-xl font-extrabold")
-                comment = ui.textarea("Motivul respingerii").props("autogrow").classes("w-full")
+                ui.label(
+                    "Motivul ajută profilul demonstrativ să prioritizeze propunerile viitoare."
+                ).classes("text-sm text-gray-600")
+                reason = ui.select(
+                    REJECTION_REASON_OPTIONS,
+                    label="Motiv principal",
+                    value=None,
+                ).props("outlined options-dense").classes("w-full")
+                comment = ui.textarea("Detalii suplimentare (opțional)").props(
+                    "autogrow outlined"
+                ).classes("w-full")
 
                 async def reject() -> None:
-                    value = str(comment.value or "").strip()
-                    if not value:
-                        ui.notify("Motivul respingerii este obligatoriu.", type="warning")
+                    reason_code = str(reason.value or "").strip()
+                    if reason_code not in REJECTION_REASON_OPTIONS:
+                        ui.notify("Selectează motivul respingerii.", type="warning")
                         return
+                    details = str(comment.value or "").strip()
+                    value = REJECTION_REASON_OPTIONS[reason_code]
+                    if details:
+                        value = f"{value}: {details}"
                     dialog.close()
-                    await review_one(proposal, action="reject", comment=value)
+                    await review_one(
+                        proposal,
+                        action="reject",
+                        comment=value,
+                        rejection_reason=reason_code,
+                    )
 
                 with ui.row().classes("w-full justify-end gap-2"):
                     ui.button("Anulează", on_click=dialog.close).props(
@@ -219,6 +279,8 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
 
         @ui.refreshable
         async def proposals_view() -> None:
+            nonlocal expert_profile
+
             proposals_container.clear()
             with proposals_container:
                 try:
@@ -228,13 +290,49 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     ui.label(api_error_message(error)).classes("text-red-700")
                     return
 
+                if profile_enabled:
+                    expert_profile = profile_from_proposals(proposals)
+
                 unreviewed = [
                     p for p in proposals 
                     if p.get("review") is None and p.get("sourceAnchors")
                 ]
-                ui.label(
-                    f"Propuneri AI: {len(proposals)} · de verificat: {len(unreviewed)}"
-                ).classes("text-xl font-extrabold text-gray-800")
+                assessments_by_id: dict[str, ConfidenceAssessment] = {}
+                if profile_enabled:
+                    assessments_by_id = {
+                        str(item.get("id")): assess_proposal(item, expert_profile)
+                        for item in proposals
+                    }
+
+                with ui.row().classes(
+                    "w-full items-center justify-between gap-3 flex-wrap"
+                ):
+                    ui.label(
+                        f"Propuneri AI: {len(proposals)} · de verificat: {len(unreviewed)}"
+                    ).classes("text-xl font-extrabold text-gray-800")
+                    if assessments_by_id and unreviewed:
+                        active_assessments = [
+                            assessments_by_id[str(item.get("id"))] for item in unreviewed
+                        ]
+                        average_confidence = round(
+                            sum(item.overall for item in active_assessments)
+                            / len(active_assessments)
+                        )
+                        attention_count = sum(
+                            bool(item.attention) or item.overall < 65
+                            for item in active_assessments
+                        )
+                        with ui.row().classes("items-center gap-2 flex-wrap"):
+                            ui.badge(
+                                f"Încredere medie {average_confidence}%",
+                                color="blue-grey-1",
+                                text_color="blue-grey-9",
+                            )
+                            ui.badge(
+                                f"{attention_count} cu semnale de atenție",
+                                color="orange-1" if attention_count else "green-1",
+                                text_color="orange-10" if attention_count else "green-10",
+                            )
 
                 if not unreviewed:
                     pending_jobs = getattr(app, "pending_extraction_jobs", {})
@@ -249,6 +347,8 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                     return
 
                 async def accept_all() -> None:
+                    nonlocal expert_profile
+
                     current = [
                         item for item in proposals 
                         if item.get("review") is None and item.get("sourceAnchors")
@@ -277,7 +377,17 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                         ui.notify(api_error_message(error), type="negative", timeout=10000)
                         return
                     key_manager.mark_succeeded(operation, fingerprint)
-                    ui.notify(f"Au fost confirmate {len(current)} obligații.", type="positive")
+                    if profile_enabled:
+                        for item in current:
+                            expert_profile = learn_from_review(
+                                expert_profile,
+                                action="accept",
+                                proposal=item,
+                            ).profile
+                    ui.notify(
+                        f"Au fost confirmate {len(current)} obligații.",
+                        type="positive",
+                    )
                     await proposals_view.refresh()
                     await criteria_view.refresh()
 
@@ -286,27 +396,125 @@ async def criteria_review_page(project_id: str, job_id: str) -> None:
                         f"Confirmă toate ({len(unreviewed)})",
                         icon="done_all",
                         on_click=accept_all,
-                    ).props("push rounded size=md color=primary no-caps").classes(
-                        "px-4 py-2 text-sm font-extrabold shadow-lg hover:scale-105 "
-                        "transition-transform duration-200 text-gray-900 self-start"
+                    ).props("outline rounded size=sm color=grey-8 no-caps").classes(
+                        "px-3 py-1 text-sm font-bold self-start hover:bg-gray-50"
                     )
-
 
                 for proposal in proposals:
                     review = proposal.get("review")
+                    assessment = assessments_by_id.get(str(proposal.get("id")))
+                    card_border = (
+                        "border-orange-200"
+                        if assessment is not None and assessment.overall < 65
+                        else "border-yellow-100"
+                    )
                     with ui.card().classes(
-                        "w-full shadow-md rounded-xl border border-yellow-100"
+                        f"w-full shadow-md rounded-xl border {card_border} p-5"
                     ):
-                        with ui.row().classes("w-full items-start justify-between gap-3"):
-                            with ui.column().classes("gap-1 flex-grow"):
+                        with ui.row().classes(
+                            "w-full items-start justify-between gap-3 flex-wrap"
+                        ):
+                            with ui.column().classes("gap-1 flex-grow min-w-[240px]"):
+                                with ui.row().classes("items-center gap-2 flex-wrap"):
+                                    if proposal.get("proposedCode"):
+                                        ui.badge(
+                                            _clean(proposal.get("proposedCode")),
+                                            color="blue-grey-1",
+                                            text_color="blue-grey-9",
+                                        ).props("outline")
+                                    if review:
+                                        action = str(review.get("action") or "")
+                                        action_label = REVIEW_ACTION_LABELS.get(action, action)
+                                        ui.badge(
+                                            f"Revizuită: {action_label}",
+                                            color="positive" if action != "reject" else "negative",
+                                            outline=True,
+                                        )
                                 ui.label(_clean(proposal.get("proposedDescription"))).classes(
                                     "text-gray-800 text-lg font-medium"
                                 )
                                 ui.label(
                                     f"Termen: {_deadline_text(proposal.get('proposedDeadline'))}"
                                 ).classes("text-sm text-gray-600")
-                            if review:
-                                ui.badge(f"Revizuit: {review.get('action')}").props("outline")
+                            if assessment is not None:
+                                with ui.column().classes(
+                                    "items-center gap-1 shrink-0 rounded-xl bg-slate-50 "
+                                    "border border-slate-100 px-3 py-2"
+                                ):
+                                    with ui.element("div").classes(
+                                        "relative flex items-center justify-center"
+                                    ):
+                                        ui.circular_progress(
+                                            value=assessment.overall,
+                                            min=0,
+                                            max=100,
+                                            size="64px",
+                                            show_value=False,
+                                            color=assessment.color,
+                                        ).props("thickness=0.15 track-color=blue-grey-2")
+                                        ui.label(f"{assessment.overall}%").classes(
+                                            "absolute inset-0 flex items-center justify-center "
+                                            "text-sm font-extrabold text-slate-800"
+                                        )
+                                    ui.label("Încredere estimată").classes(
+                                        "text-[10px] uppercase tracking-wide font-bold "
+                                        "text-gray-500"
+                                    )
+                                    ui.badge(
+                                        assessment.level,
+                                        color=assessment.color,
+                                        outline=True,
+                                    ).classes("text-xs font-bold")
+
+                        if assessment is not None:
+                            with ui.expansion(
+                                "Cum a fost estimat scorul",
+                                icon="insights",
+                            ).classes(
+                                "w-full rounded-lg bg-slate-50 border border-slate-100 mt-2"
+                            ):
+                                ui.label(assessment.recommendation).classes(
+                                    "text-sm font-bold text-slate-700 mb-1"
+                                )
+                                for factor in assessment.factors:
+                                    with ui.column().classes("w-full gap-1 mb-2"):
+                                        with ui.row().classes(
+                                            "w-full justify-between items-center gap-2"
+                                        ):
+                                            ui.label(factor.label).classes(
+                                                "text-xs font-medium text-gray-600"
+                                            )
+                                            ui.label(f"{factor.score}%").classes(
+                                                "text-xs font-extrabold text-gray-700"
+                                            )
+                                        ui.linear_progress(
+                                            value=factor.score / 100,
+                                            show_value=False,
+                                            color=_score_color(factor.score),
+                                        ).props("rounded size=7px track-color=blue-grey-2")
+                                if assessment.attention:
+                                    with ui.column().classes("w-full gap-1 mt-1"):
+                                        for warning in assessment.attention:
+                                            with ui.row().classes(
+                                                "items-start gap-2 text-orange-800"
+                                            ):
+                                                ui.icon("warning_amber").classes(
+                                                    "text-base mt-0.5"
+                                                )
+                                                ui.label(warning).classes("text-xs")
+                                else:
+                                    with ui.row().classes(
+                                        "items-center gap-2 text-green-700 mt-1"
+                                    ):
+                                        ui.icon("verified").classes("text-base")
+                                        ui.label(
+                                            "Nu au fost identificate semnale suplimentare "
+                                            "de atenție."
+                                        ).classes("text-xs")
+                                ui.label(
+                                    "Scor euristic demonstrativ; nu reprezintă o "
+                                    "probabilitate calibrată."
+                                ).classes("text-[10px] text-gray-500 mt-2")
 
                         anchors = proposal.get("sourceAnchors") or []
                         if anchors:
